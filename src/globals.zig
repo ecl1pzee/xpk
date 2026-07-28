@@ -15,3 +15,6 @@ pub const firstrun = base ++ "/.xpk";           // fixed
 pub const conf = base ++ "/xpk.conf"; 
 // wow 
 pub const buildusr = "xpk";
+
+pub const stage = tmp ++ "/stage"; // destdir, package installs go in here
+pub const dbfile = db ++ "/db"; // like the index files, this is in a binary format simmilar to that of 
