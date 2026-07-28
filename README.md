@@ -43,7 +43,7 @@ aurelius (xpk maintainer)
     Or view directly:
     https://keys.openpgp.org/search?q=719459C40E06BCD87785528F48DC10155AE487B5
 
-firewald (xpk maintainer)
+eclipse_dev (xpk maintainer)
 --------------------------------
     Fingerprint: D9F7 0FAA AD6F A15D 6BC3 C755 9B4F B4E0 8086 1302
 
@@ -53,6 +53,10 @@ firewald (xpk maintainer)
     Or view directly:
     https://keys.openpgp.org/search?q=D9F70FAAAD6FA15D6BC3C7559B4FB4E080861302
 
+> [!WARNING]
+> Due to ecl1pse (previously firewald/fischblob-lol) switching operating systems from
+> endeavourOS to FreeBSD. they want to also get new pgp keys
+> capiche?
 
 A release signed by either key should be considered valid. If you
 notice a release signed by a key not listed here, treat it as
