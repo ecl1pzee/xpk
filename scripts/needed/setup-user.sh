@@ -32,7 +32,7 @@ else
             "$buildusr"
         ;;
 
-    FreeBSD) # here is ur freebsd support
+    FreeBSD)
         echo "[*] creating system user '$buildusr' (freebsd)..."
         pw useradd "$buildusr" \
             -r \
