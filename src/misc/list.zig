@@ -64,7 +64,7 @@ pub fn list(io: std.Io, allocator: std.mem.Allocator) !void {
         for (current.items) |pkg| {
             log.debug3("printing package {s}/{s} (gen {d})\n", .{pkg.category, pkg.name, pkg.generation});
 
-            log.info("  {s}/{s} {s} (gen {d})\n", .{pkg.category, pkg.name, pkg.version, pkg.generation});
+            log.print("  {s}/{s} {s} (gen {d})\n", .{pkg.category, pkg.name, pkg.version, pkg.generation});
 
             total += 1;
         }
@@ -119,7 +119,7 @@ pub fn search(io: std.Io, allocator: std.mem.Allocator, query: []const u8) !void
             {
                 log.info("match found: {s}/{s}\n", .{pkg.category, pkg.name});
 
-                log.info("{s}/{s} {s} ({s}, gen {d})\n", .{pkg.category, pkg.name, pkg.version, pkg.repo, pkg.generation});
+                log.print("{s}/{s} {s} ({s}, gen {d})\n", .{pkg.category, pkg.name, pkg.version, pkg.repo, pkg.generation});
 
                 found += 1;
             }
