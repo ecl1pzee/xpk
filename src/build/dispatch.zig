@@ -5,6 +5,7 @@ const make = @import("make.zig");
 const meson = @import("meson.zig");
 const utils = @import("../utils/utils.zig");
 const autotools = @import("autotools.zig");
+const config = @import("../config.zig");
 const print = std.debug.print;
 
 inline fn wprint(comptime fmt: []const u8, args: anytype) void {
@@ -20,9 +21,10 @@ const buildsystems = std.StaticStringMap(buildf).initComptime(.{
     .{ "autotools", autotools.build },
 });
 
+// changed these, although it is recommended to keep xpk user as is, you can make your home user do this, etc.
 fn ensure_buildusr(io: std.Io) !void {
     var child = std.process.spawn(io, .{
-        .argv = &.{ "id", "-u", "xpk" },
+        .argv = &.{ "id", "-u", config.current.build_usr },
         .stdout = .ignore,
         .stderr = .ignore,
     }) catch return error.buildusermissing;
@@ -31,17 +33,17 @@ fn ensure_buildusr(io: std.Io) !void {
     switch (term) {
         .exited => |code| {
             if (code != 0) {
-                wprint("build user 'xpk' not found. run scripts/needed/setup-xpk-build-user.sh from the repo scripts first\n", .{});
+                wprint("build user '{s}' not found. run scripts/needed/setup-xpk-build-user.sh from the repo scripts first\n", .{config.current.build_usr});
                 return error.buildusermissing;
             }
         },
         else => return error.buildusermissing,
     }
 }
-// chowns root downloaded to xpk, will probably make root also be owned by xpk already but this is just a fast fix
+
 fn ensure_own(io: std.Io, sourced: []const u8) !void {
     var child = std.process.spawn(io, .{
-        .argv = &.{ "chown", "-R", "xpk", sourced },
+        .argv = &.{ "chown", "-R", config.current.build_usr, sourced },
         .stdout = .ignore,
         .stderr = .ignore,
     }) catch return error.chownfailed;
@@ -50,7 +52,7 @@ fn ensure_own(io: std.Io, sourced: []const u8) !void {
     switch (term) {
         .exited => |code| {
             if (code != 0) {
-                wprint("failed to chown {s} to build user 'xpk', build steps will likely fail\n", .{sourced});
+                wprint("failed to chown {s} to build user '{s}', build steps will likely fail\n", .{ sourced, config.current.build_usr });
                 return error.chownfailed;
             }
         },
@@ -58,7 +60,7 @@ fn ensure_own(io: std.Io, sourced: []const u8) !void {
     }
 }
 
-// build function down herei
+// build function down heei
 pub fn run_build(io: std.Io, allocator: std.mem.Allocator, build: utils.parser.Build, pkg: utils.parser.Pkg, sourced: []const u8) !void {
     try ensure_buildusr(io);
     try ensure_own(io, sourced);

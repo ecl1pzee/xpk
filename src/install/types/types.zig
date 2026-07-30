@@ -8,9 +8,11 @@ pub const Fileentry = struct {
 
 pub const Manifesterror = error{ badmagic, unsupportedvers, crcmismatch, truncated };
 
+const magic = "XPKF";
+
 pub fn parse_m(buf: []const u8, allocator: std.mem.Allocator) ![][]const u8 {
     if (buf.len < 4 + 2 + 4 + 4) return Manifesterror.truncated;
-    if (!std.mem.eql(u8, buf[0..4], "XPKF")) return Manifesterror.badmagic;
+    if (!std.mem.eql(u8, buf[0..4], magic)) return Manifesterror.badmagic;
 
     var pos: usize = 4;
     const version = std.mem.readInt(u16, buf[pos..][0..2], .little);
@@ -41,7 +43,7 @@ pub fn encode_m(allocator: std.mem.Allocator, paths: []const []const u8) ![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
-    try out.appendSlice(allocator, "XPKF");
+    try out.appendSlice(allocator, magic);
 
     var verbuf: [2]u8 = undefined;
     std.mem.writeInt(u16, &verbuf, 1, .little);

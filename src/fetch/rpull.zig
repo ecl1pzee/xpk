@@ -4,19 +4,17 @@ const downloader = @import("../downloader/downloader.zig");
 const types = @import("../index/types/types.zig");
 const verity = @import("../security/verify.zig");
 const utils = @import("../utils/utils.zig");
+const log = @import("../utils/log.zig");
+
 const print = std.debug.print;
 
-// made a function for creating dirs, so if it stalls it only errors the function and not errors pull_repo, messy workaround but wtv
+// made a function for creating dirs, so if it stalls it only errors the function and not errors pull_repo, messy workaround but wt
+
 fn createdir(io: std.Io, path: []const u8) !void {
-    std.Io.Dir.createDirAbsolute(
-        io,
-        path,
-        .default_dir,
-    ) catch |err| switch (err) {
-        error.PathAlreadyExists => {},
-        else => return err,
-    };
+    return utils.fs.createdir(io, path);
 }
+
+
 // and another one here, because iof the crossdevice bug
 fn rename(io: std.Io, old: []const u8, new: []const u8) !void {
     std.Io.Dir.renameAbsolute(old, new, io) catch |err| switch (err) {
@@ -58,22 +56,6 @@ fn rename(io: std.Io, old: []const u8, new: []const u8) !void {
 }
 
 
-inline fn errprint(comptime fmt: []const u8, args: anytype) void {
-    print("[x] " ++ fmt, args);
-}
-
-inline fn iprint(comptime fmt: []const u8, args: anytype) void {
-    print("[*] " ++ fmt, args);
-}
-
-inline fn wprint(comptime fmt: []const u8, args: anytype) void {
-    print("[!] " ++ fmt, args);
-}
-
-// cool looking print
-inline fn cprint(comptime fmt: []const u8, args: anytype) void {
-    print("[+] " ++ fmt, args);
-}
 
 
 // inits the main repo firstly, used in main right after all creations run, this is gonna uhh change, 100% because this is the commit to github
@@ -87,7 +69,7 @@ pub fn init_repos(io: std.Io) !void {
         \\
     ;
     
-    wprint("first run of xpk may be quite slow due to initalization!\n", .{});
+    log.warn("first run of xpk may be quite slow due to initalization!\n", .{});
 
     if (std.Io.Dir.openFileAbsolute(io, globals.reposconf, .{ .mode = .read_only })) |file| {
         file.close(io);
@@ -115,11 +97,13 @@ fn sync_repo(io: std.Io, allocator: std.mem.Allocator, repo: utils.parser.Repo) 
 
     try createdir(io, repopath);
 
+    
     const indexurl = try std.fmt.allocPrint(allocator, "{s}/index", .{repo.url});
     const keyringurl = try std.fmt.allocPrint(allocator, "{s}/trust/keyring", .{repo.url});
     defer allocator.free(indexurl);
     defer allocator.free(keyringurl);
 
+    log.trace("starting async download\n", .{});
     var indexfut = io.async(downloader.download_repo, .{ io, allocator, indexurl, repo.name, false });
     var keyringfut = io.async(downloader.download, .{ io, allocator, keyringurl, true });
 
@@ -132,7 +116,7 @@ fn sync_repo(io: std.Io, allocator: std.mem.Allocator, repo: utils.parser.Repo) 
     defer allocator.free(keyringbytes);
     // shan't happen for big repos
     var keyring = utils.parser.parse_k(allocator, keyringbytes) catch |err| {
-        wprint("{s}'s keyring is malformed ({s}), refusing to sync\n", .{ repo.name, @errorName(err) });
+        log.warn("{s}'s keyring is malformed ({s}), refusing to sync\n", .{ repo.name, @errorName(err) });
         return error.badkeyring;
     };
     defer {
@@ -144,13 +128,13 @@ fn sync_repo(io: std.Io, allocator: std.mem.Allocator, repo: utils.parser.Repo) 
     defer allocator.free(rawindex);
 
     var signed = types.split_s(rawindex, allocator) catch |err| {
-        wprint("{s}'s index is malformed or unsigned ({s}), refusing to sync\n", .{ repo.name, @errorName(err) });
+        log.warn("{s}'s index is malformed or unsigned ({s}), refusing to sync\n", .{ repo.name, @errorName(err) });
         return error.badindex;
     };
     defer signed.deinit(allocator);
 
     verity.verify_s(signed, keyring) catch |err| {
-        wprint("{s}'s index failed signature verification ({s}), refusing to sync\n", .{ repo.name, @errorName(err) });
+        log.err("{s}'s index failed signature verification ({s}), refusing to sync\n", .{ repo.name, @errorName(err) });
         return error.untrustedindex;
     };
 
@@ -178,17 +162,18 @@ pub fn pull_repo(io: std.Io, allocator: std.mem.Allocator) !void {
     const reposbytes = try std.Io.Dir.cwd().readFileAlloc(io, globals.reposconf, allocator, .unlimited);
     defer allocator.free(reposbytes);
 
-    cprint("syncing repos...\n", .{});
+    log.info("syncing repos...\n", .{});
 
     const repos = try utils.parser.parse_r(allocator, reposbytes);
     defer allocator.free(repos);
     
     
     if (repos.len == 0) {
-        iprint("no repositories configured, please configure a repo\n", .{});
+        log.info("no repositories configured, please configure a repo\n", .{});
         return;
     }
 
+    log.trace("setting up async futures\n", .{});
     const Fut = @TypeOf(io.async(sync_repo, .{ io, allocator, repos[0] }));
     var futures: std.ArrayList(Fut) = .empty;
     defer futures.deinit(allocator);
@@ -207,16 +192,16 @@ pub fn pull_repo(io: std.Io, allocator: std.mem.Allocator) !void {
 
     for (futures.items, 0..) |*futs, i| {
         futs.await(io) catch |err| {
-            wprint("failed to sync {s}: {s}, skipping\n", .{ names.items[i], @errorName(err) });
+            log.warn("failed to sync {s}: {s}, skipping\n", .{ names.items[i], @errorName(err) });
             failures += 1;
             continue;
         };
     }
     // usually all repos failed to sync means your internet isnt fucking working
     if (failures == futures.items.len and futures.items.len > 0) {
-        errprint("all repositories failed to sync, are you sure you are online?\n", .{});
+        log.err("all repositories failed to sync, are you sure you are online?\n", .{});
     } else {
-        iprint("all repositories up to date!\n", .{});
+        log.success("all repositories up to date!\n", .{});
     }
 }
 

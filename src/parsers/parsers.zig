@@ -1,20 +1,9 @@
 const std = @import("std");
 const types = @import("types/types.zig");
+const log = @import("../utils/log.zig");
 const automl = @import("automl");
 
 const print = std.debug.print;
-
-inline fn errprint(comptime fmt: []const u8, args: anytype) void {
-    print("[x] " ++ fmt, args);
-}
- 
-inline fn iprint(comptime fmt: []const u8, args: anytype) void {
-    print("[*] " ++ fmt, args);
-}
- 
-inline fn wprint(comptime fmt: []const u8, args: anytype) void {
-    print("[!] " ++ fmt, args);
-}
 
 // so, congrats to me! i've written an entire fucking fully function toml parser, and its working here as evident
 
@@ -22,7 +11,7 @@ inline fn wprint(comptime fmt: []const u8, args: anytype) void {
 pub fn parse_k(allocator: std.mem.Allocator, text: []const u8) !types.Keyring {
     var parser = automl.Parser.init(allocator);
     var doc = parser.parse(text) catch |err| {
-        errprint("{f}\n", .{parser.diag});
+        log.err("{f}\n", .{parser.diag});
         return err;
     };
     defer doc.deinit();
@@ -73,7 +62,7 @@ fn key_ftb(table: *automl.Table) !types.Key {
 pub fn parse_r(allocator: std.mem.Allocator, text: []const u8) ![]types.Repo {
     var parser = automl.Parser.init(allocator);
     var doc = parser.parse(text) catch |err| {
-        errprint("{f}\n", .{parser.diag});
+        log.err("{f}\n", .{parser.diag});
         return err;
     };
     defer doc.deinit();
@@ -136,7 +125,7 @@ pub fn parse_r(allocator: std.mem.Allocator, text: []const u8) ![]types.Repo {
 pub fn parse_a(allocator: std.mem.Allocator, text: []const u8) !types.Xbuild {
     var parser = automl.Parser.init(allocator);
     var doc = parser.parse(text) catch |err| {
-        errprint("{f}\n", .{parser.diag});
+        log.err("{f}\n", .{parser.diag});
         return err;
     };
     defer doc.deinit();
@@ -186,5 +175,51 @@ pub fn parse_a(allocator: std.mem.Allocator, text: []const u8) !types.Xbuild {
     return result;
 }
 
-// imma add a config parser here later
-// after this commit probs
+
+// parse_c
+// you also wanna for your own libraries or executables if ur using automl, to dupe or intcast shit, specifically dupe if []const u8, intcast if its an int,
+pub fn parse_c(allocator: std.mem.Allocator, text: []const u8) !types.Config {
+    var parser = automl.Parser.init(allocator);
+    var doc = parser.parse(text) catch |err| {
+        log.err("{f}\n", .{parser.diag});
+        return err;
+    };
+    defer doc.deinit();
+
+    var cfg: types.Config = .{};
+
+    // [core]
+    if (try doc.get_str("core", "verbosity")) |v| cfg.verbosity = try allocator.dupe(u8, v);
+    if (try doc.get_bool("core", "color")) |v| cfg.color = v;
+    if (try doc.get_bool("core", "confirm")) |v| cfg.confirm = v;
+
+    // [download]
+    if (try doc.get_int("download", "repo-jobs")) |v| cfg.repo_jobs = @intCast(v);
+    if (try doc.get_int("download", "pkg-jobs")) |v| cfg.pkg_jobs = @intCast(v);
+    if (try doc.get_int("download", "retries")) |v| cfg.retries = @intCast(v);
+    if (try doc.get_int("download", "timeout")) |v| cfg.timeout = @intCast(v);
+    if (try doc.get_bool("download", "prog")) |v| cfg.prog = v;
+
+    // [build]
+    if (try doc.get_str("build", "build-usr")) |v| cfg.build_usr = try allocator.dupe(u8, v);
+    if (try doc.get_str("build", "build-path")) |v| cfg.build_path = try allocator.dupe(u8, v);
+    if (try doc.get_bool("build", "keep-stage")) |v| cfg.keep_stage = v;
+    if (try doc.get_int("build", "jobs")) |v| cfg.jobs = @intCast(v);
+
+    // [store]
+    if (try doc.get_int("store", "max-gens")) |v| cfg.max_gens = @intCast(v);
+    if (try doc.get_bool("store", "autogc")) |v| cfg.autogc = v;
+
+    // [repo]
+    if (try doc.get_int("repo", "def-prio")) |v| cfg.def_prio = @intCast(v);
+    if (try doc.get_bool("repo", "verify-sig")) |v| cfg.verify_sig = v;
+
+    // [sandbox]
+    if (try doc.get_bool("sandbox", "sandbox")) |v| cfg.sandbox = v;
+    if (try doc.get_bool("sandbox", "sandbox-net")) |v| cfg.sandbox_net = v;
+
+    // [misc]
+    if (try doc.get_str("misc", "logfile")) |v| cfg.logfile = try allocator.dupe(u8, v);
+
+    return cfg;
+}

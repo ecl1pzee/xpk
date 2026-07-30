@@ -1,7 +1,7 @@
 const std = @import("std");
 const globals = @import("../globals.zig");
 const print = std.debug.print;
-
+// this will have print because frankly 0 fucking need to have anything but normal print for bars
 fn createdir(io: std.Io, path: []const u8) !void {
     std.Io.Dir.createDirAbsolute(
         io,

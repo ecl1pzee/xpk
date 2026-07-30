@@ -3,20 +3,20 @@ const std = @import("std");
 
 // basically, same as index files i went over a binary format here, but this contains the 'base info' of all packages, while the actual remove info is contained in /opt/xpk/db/(reponame)/files
 // but yeah these are the same shit as index, and all use crc for checking
-//   magic "XPKD" 
-//   version u16 LE
-//   count u32 LE (actual amount of entries)
-//   entries (these are entries in plain text, which contain XPKF, which contain the files)
-//   crc32 u32 LE (over everything before it)
-//
-// one world file per repo means a name collision across repos never gets confused, i decided to ijmplement this earlier so it doesnt become a pain in the ass later, but otherwise its very simmilar to idxentry
+// so it doesnt become a pain in the ass later, but otherwise its very simmilar to idxentry
+
+const magic = "XPKD";
+const formatvers: u16 = 2; // two
+
 pub const Dbentry = struct {
     name: []const u8,
     category: []const u8,
     version: []const u8,
-    repo: []const u8,        // which repo this came from, helps prevent name cols
-    xhash: [32]u8,            // hash of the xbuild that installed it, ties back to index
+    repo: []const u8,       // which repo this came from, helps prevent name cols
+    xhash: [32]u8,          // hash of the xbuild that installed it, ties to index
+    objhash: [32]u8,        // hash of the built object tree, ties to /opt/xpk/objects/name-version-(hash goes here)
     installedt: i64,        // toseconds timestamp
+    generation: u32,        // generation of package
 
     pub fn encode(self: Dbentry, allocator: std.mem.Allocator) ![]u8 {
         var blob: std.ArrayList(u8) = .empty;
@@ -30,10 +30,15 @@ pub const Dbentry = struct {
         }
 
         try blob.appendSlice(allocator, &self.xhash);
+        try blob.appendSlice(allocator, &self.objhash);
 
         var tsbuf: [8]u8 = undefined;
         std.mem.writeInt(i64, &tsbuf, self.installedt, .little);
         try blob.appendSlice(allocator, &tsbuf);
+
+        var genbuf: [4]u8 = undefined;
+        std.mem.writeInt(u32, &genbuf, self.generation, .little);
+        try blob.appendSlice(allocator, &genbuf);
 
         return blob.toOwnedSlice(allocator);
     }
@@ -44,14 +49,30 @@ pub const Dbentry = struct {
         const version = try allocator.dupe(u8, read_f(buf, pos));
         const repo = try allocator.dupe(u8, read_f(buf, pos));
 
-        var hash: [32]u8 = undefined;
-        @memcpy(&hash, buf[pos.*..][0..32]);
+        var xhash: [32]u8 = undefined;
+        @memcpy(&xhash, buf[pos.*..][0..32]);
+        pos.* += 32;
+
+        var objhash: [32]u8 = undefined;
+        @memcpy(&objhash, buf[pos.*..][0..32]);
         pos.* += 32;
 
         const ts = std.mem.readInt(i64, buf[pos.*..][0..8], .little);
         pos.* += 8;
 
-        return .{.name = name,.category = category,.version = version,.repo = repo,.xhash = hash,.installedt = ts};
+        const generation = std.mem.readInt(u32, buf[pos.*..][0..4], .little);
+        pos.* += 4;
+
+        return .{
+            .name = name,
+            .category = category,
+            .version = version,
+            .repo = repo,
+            .xhash = xhash,
+            .objhash = objhash,
+            .installedt = ts,
+            .generation = generation,
+        };
     }
 
     fn read_f(buf: []const u8, pos: *usize) []const u8 {
@@ -75,12 +96,12 @@ pub const Dberror = error{ badmagic, unsupportedvers, crcmismatch, truncated };
 
 pub fn parse_db(buf: []const u8, allocator: std.mem.Allocator) ![]Dbentry {
     if (buf.len < 4 + 2 + 4 + 4) return Dberror.truncated;
-    if (!std.mem.eql(u8, buf[0..4], "XPKD")) return Dberror.badmagic;
+    if (!std.mem.eql(u8, buf[0..4], magic)) return Dberror.badmagic;
 
     var pos: usize = 4;
     const version = std.mem.readInt(u16, buf[pos..][0..2], .little);
     pos += 2;
-    if (version != 1) return Dberror.unsupportedvers;
+    if (version != formatvers) return Dberror.unsupportedvers;
 
     const count = std.mem.readInt(u32, buf[pos..][0..4], .little);
     pos += 4;
@@ -103,10 +124,10 @@ pub fn encode_db(allocator: std.mem.Allocator, entries: []const Dbentry) ![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
-    try out.appendSlice(allocator, "XPKD");
+    try out.appendSlice(allocator, magic);
 
     var verbuf: [2]u8 = undefined;
-    std.mem.writeInt(u16, &verbuf, 1, .little);
+    std.mem.writeInt(u16, &verbuf, formatvers, .little);
     try out.appendSlice(allocator, &verbuf);
 
     var countbuf: [4]u8 = undefined;

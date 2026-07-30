@@ -67,3 +67,40 @@ pub const Repo = struct {
     priority: u8 = 0,
     enabled: bool = true,
 };
+
+// xpk.conf
+pub const Config = struct {
+
+    // [core]
+    verbosity: []const u8 = "info",  // quiet/err/warn/info/debug1/debug2/debug3/trace
+    color: bool = true,              // ansi color codes 
+    confirm: bool = true,            // whether install prompt actually prompts
+    
+    // [download] 
+    repo_jobs: u32 = 4,               // max repos, defaults to 4 
+    pkg_jobs: u32 = 1,                // max packages fetched concurrently, for later
+    retries: u32 = 3,                // retry attempts on a failed download before giving up
+    timeout: u32 = 30,               // seconds before a stalled download is considered dead
+    prog: bool = true,              // show the [#####] progress bar or / spinner
+
+    // [build] —
+    build_usr: []const u8 = "xpk",           // unprivileged system account build/hook steps run as (see run.zig's su xpk -c)
+    build_path: []const u8 = "/opt/xpk/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin", // path exported, i figured it would be nice
+    keep_stage: bool = false,         // for debugging
+    jobs: u32 = 0,                   // build jobs, gets appended as an arg in build
+
+    // [store] 
+    max_gens: u32 = 5,                // maximum generations allowed
+    autogc: bool = false,            // auto prune gens each install
+
+    // [repo] 
+    def_prio: u8 = 0,                 // fallback priority, though this shouldn't happen
+    verify_sig: bool = true,          // require valid sigs
+
+    // [sandbox] (future)
+    sandbox: bool = false,           // master toggle for sandboxed builds, will get its own wrapper
+    sandbox_net: bool = false,        // whether sandboxed build steps get network access at all, usually not (arch gotta learn from us foreallll)
+
+    // [misc]
+    logfile: ?[]const u8 = null,     // optional shit, will add more optional shit
+};

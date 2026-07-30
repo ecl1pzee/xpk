@@ -1,22 +1,19 @@
-//! rewritten right before commit so it has more determinsitic unpacking
+//! rewritten right before commit so it has more LESS determinstic unpacking what am i on 
 const std = @import("std");
 const globals = @import("../globals.zig");
-const print = std.debug.print;
+const log = @import("../utils/log.zig");
+const utils = @import("../utils/utils.zig");
+
 
 // luckily, due to the new zig 0.16.0 api:
 // i dont need to make specific functions for each extraction
 // which is amazing.
 
 fn createdir(io: std.Io, path: []const u8) !void {
-    std.Io.Dir.createDirAbsolute(
-        io,
-        path,
-        .default_dir,
-    ) catch |err| switch (err) {
-        error.PathAlreadyExists => {},
-        else => return err,
-    };
+    return utils.fs.createdir(io, path);
 }
+
+
 
 // extract tar, does what it says
 pub fn extract_tar(io: std.Io, allocator: std.mem.Allocator, tarballpath: []const u8, strip: u32) ![]const u8 {
@@ -70,9 +67,8 @@ pub fn extract_tar(io: std.Io, allocator: std.mem.Allocator, tarballpath: []cons
         var decomp = std.compress.flate.Decompress.init(&freader.interface, .gzip, &flatebuf);
 
         try std.tar.extract(io, destination, &decomp.reader, opts); 
-
     } else {
-        print("unsupported tarball extension: {s}\n", .{tarballpath});
+        log.err("unsupported tarball extension: {s}\n", .{tarballpath});
         return error.unsupportedcompressedarchive; // returns this t know its bad, i will add support for basically every single one tho
     }
 

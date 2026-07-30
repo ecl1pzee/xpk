@@ -1,21 +1,10 @@
 const std = @import("std");
 const utils = @import("../utils/utils.zig");
 const types = @import("types/types.zig");
+const log = @import("../utils/log.zig");
 const Ed25519 = std.crypto.sign.Ed25519;
 const sign = @import("../security/keygen.zig").sign;
 const print = std.debug.print;
-
-inline fn errprint(comptime fmt: []const u8, args: anytype) void {
-    print("[x] " ++ fmt, args);
-}
-
-inline fn iprint(comptime fmt: []const u8, args: anytype) void {
-    print("[*] " ++ fmt, args);
-}
-
-inline fn wprint(comptime fmt: []const u8, args: anytype) void {
-    print("[!] " ++ fmt, args);
-}
 
 // magic bytes for index.bin, so you can instantly tell from a xxd/hexdump, and because it looks fucking awesome and cool tbh
 const magic = "XPKI";
@@ -105,6 +94,7 @@ pub fn wrap_signed(allocator: std.mem.Allocator, indexbin: []const u8, sigs: []c
 // now writes its own binary format (index.bin) instead of json
 // this is more of a developer exclusive use tool, as its made for generating repos instead of updating, however users can obviously just use this tool to wire up their own repos
 // recent add: hashing for individual xbuilds
+// and, this is literally a dev tool so i fear log.info=log.trace here, but ill add some debugging anyawys
 pub fn index_repo(io: std.Io, allocator: std.mem.Allocator, repopath: []const u8, kp: Ed25519.KeyPair) !void {
     var entries: std.ArrayList(types.Idxentry) = .empty;
     defer entries.deinit(allocator);
@@ -137,23 +127,24 @@ pub fn index_repo(io: std.Io, allocator: std.mem.Allocator, repopath: []const u8
 
             const bytes = std.Io.Dir.cwd().readFileAlloc(io, buildpath, allocator, .unlimited) catch |err| switch (err) {
                 error.FileNotFound => {
-                    wprint("{s}/{s} has no xbuild, skipping\n", .{ category.name, package.name }); 
+                    log.warn("{s}/{s} has no xbuild, skipping\n", .{ category.name, package.name }); 
                     continue;
                 }, else => return err,
             };
             defer allocator.free(bytes);       
             
-            // this will fail if not all requirements for [pkg] and [build] are satisfied too, however i think thats fine for right now or maybe long term before we get 'just' binaries 
+            // this will fail if not all requirements for [pkg] and [build] are satisfied too, however i think thats fine for right now or maybe long term before we get 'just' binaries, plus we need a repo for that
             const xbuild = try utils.parser.parse_a(allocator, bytes);
     
             // desc is optional in the type, but the index wants a string for every entry.
             // rather than force unwrap and panic the whole index run over one sloppy package, it just empties it and warns so you actually write a desc
             const desc = xbuild.info.desc orelse blk: {
-                wprint("{s}/{s} has no desc in xbuild, defaulting to nothing\n", .{ category.name, package.name },);
+                log.warn("{s}/{s} has no desc in xbuild, defaulting to nothing\n", .{ category.name, package.name },);
                 break :blk ""; // break loop, i hate that syntax 
             };
 
             // appends everything so it can put it into the binary blob, unrolled for readability 
+            log.trace("appending all entries...\n", .{});
             try entries.append(allocator, .{
                 .xhash = try utils.security.get_hashb(bytes),
                 .name = try allocator.dupe(u8, xbuild.info.name),
@@ -163,15 +154,17 @@ pub fn index_repo(io: std.Io, allocator: std.mem.Allocator, repopath: []const u8
             });
 
             // nice to just do this
-            iprint("{s}/{s} indexed\n", .{ category.name, package.name });
+            log.info("{s}/{s} indexed\n", .{ category.name, package.name });
         }
     }
 
     // here that happens, we encode the blob 
+    log.trace("encoding binary blob\n", .{});
     const indexbin = try encode_idx(allocator, entries.items, head); 
     defer allocator.free(indexbin);
 
     // sign raw body, then its wrapped and easily unwrapped
+    log.trace("signing index\n", .{});
     const sigbytes = try sign(kp, indexbin);
     const sigs = [_]types.Sigentry{.{
         .fingerprint = kp.public_key.toBytes(),
@@ -197,7 +190,7 @@ pub fn index_repo(io: std.Io, allocator: std.mem.Allocator, repopath: []const u8
 
     // also, later ill add a compression to the index.bin so for even more packages its compressed and is so much faster to download
     // but ill do it only when we have like 30 packages
-    iprint("indexed {d} packages, signed with fingerprint {x}\n", .{ entries.items.len, kp.public_key.toBytes() });
+    log.info("indexed {d} packages, signed with fingerprint {x}\n", .{ entries.items.len, kp.public_key.toBytes() });
 }
 
 // gets head directly from file so we dont use git as a dep,
@@ -220,11 +213,7 @@ fn get_head(io: std.Io, allocator: std.mem.Allocator, repopath: []const u8) ![32
 
     if (std.mem.startsWith(u8, head, "ref: ")) {
         // normal branch
-        const ref = std.mem.trim(
-            u8,
-            head["ref: ".len..],
-            " \n\r\t",
-        );
+        const ref = std.mem.trim(u8, head["ref: ".len..], " \n\r\t");
 
         const refpath = try std.fs.path.join(
             allocator,

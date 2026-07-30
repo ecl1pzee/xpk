@@ -12,6 +12,7 @@ const extractor = @import("../extract/extract.zig");
 const verity = @import("../security/verify.zig"); // ask me anything
 const keygen = @import("../security/keygen.zig");
 const mlist = @import("../misc/list.zig");
+const fsutil = @import("fsutil.zig");
 
 
 pub const cli = struct {
@@ -69,4 +70,8 @@ pub const misc = struct {
     pub const list = mlist.list;
     pub const search = mlist.search;
     pub const info = mlist.info;
+};
+
+pub const fs = struct {
+    pub const createdir = fsutil.createdir;
 };

@@ -4,6 +4,7 @@
 //! thats it
 //! especially they will change when porting to linux
 //! real
+//! these are gonna probably dissapear soon, everything is gonna be in /opt/xpk/xo
 
 pub const base = "/opt/xpk";
 pub const db = base ++ "/db";
@@ -18,3 +19,4 @@ pub const buildusr = "xpk";
 
 pub const stage = tmp ++ "/stage"; // destdir, package installs go in here
 pub const dbfile = db ++ "/db"; // like the index files, this is in a binary format simmilar to that of 
+pub const objects = base ++ "/objects";

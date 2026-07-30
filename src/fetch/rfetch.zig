@@ -8,6 +8,7 @@ const types = @import("types/types.zig");
 const globals = @import("../globals.zig");
 const downloader = @import("../downloader/downloader.zig");
 const utils = @import("../utils/utils.zig");
+const log = @import("../utils/log.zig");
 
 const print = std.debug.print;
 
@@ -28,17 +29,7 @@ fn build_url(allocator: std.mem.Allocator, repourl: []const u8, headstr: []const
     return try std.fmt.allocPrint(allocator, "{s}/{s}", .{ repourl, subpath });
 }
 
-inline fn errprint(comptime fmt: []const u8, args: anytype) void {
-    print("[x] " ++ fmt, args);
-}
 
-inline fn iprint(comptime fmt: []const u8, args: anytype) void {
-    print("[*] " ++ fmt, args);
-}
-
-inline fn wprint(comptime fmt: []const u8, args: anytype) void {
-    print("[!] " ++ fmt, args);
-}
 
 // taken from neo, only thing implemented new is the limit, so malicious gigantic package specs/infos cant lag you (unless you are lacking 8192 bytes of ram)
 fn fetchraw(allocator: std.mem.Allocator, io: std.Io, url: []const u8) ![]u8 {
@@ -81,6 +72,7 @@ pub fn remote_fetch(io: std.Io, allocator: std.mem.Allocator, package: []const u
     var foundpkg: ?types.Idxentry = null;
     var foundhead: [32]u8 = undefined;
 
+    log.trace("going through repos\n", .{});
     for (repos) |repo| {
         if (!repo.enabled) continue;
 
@@ -91,7 +83,7 @@ pub fn remote_fetch(io: std.Io, allocator: std.mem.Allocator, package: []const u
         const indexbytes = std.Io.Dir.cwd().readFileAlloc(io, indexpath, allocator, .unlimited) catch continue;
 
         const parsed = types.parse_idx(indexbytes, allocator) catch |err| {
-            wprint("{s}'s index is malformed ({s}), skipping repo\n", .{ repo.name, @errorName(err) });
+            log.warn("{s}'s index is malformed ({s}), skipping repo\n", .{ repo.name, @errorName(err) });
             continue;
         };
         defer allocator.free(parsed.offsets); // we free these cuz we don't need allat after the for statement
@@ -114,10 +106,12 @@ pub fn remote_fetch(io: std.Io, allocator: std.mem.Allocator, package: []const u
     const repourl = foundrepourl orelse unreachable;
 
     const pkg = foundpkg orelse {
-        wprint("package {s} doesn't exist in any enabled repo\n", .{package});
+        log.warn("package {s} doesn't exist in any enabled repo\n", .{package});
         std.process.exit(1); // errors that happen a lot are ugly, thats why std.process.exit is used to not let that happen
     };
 
+
+    log.trace("formatting urls\n", .{});
 
     // formats head for sha1/sha256 git head, since xpk-c currently uses sha1, we just do that, but it supports repos with git sha-256!
     const headstr = try format_head(allocator, foundhead);
@@ -131,7 +125,7 @@ pub fn remote_fetch(io: std.Io, allocator: std.mem.Allocator, package: []const u
     defer allocator.free(xbuildurl);
 
     
-    iprint("getting remote build files...\n", .{});
+    log.info("getting remote build files...\n", .{});
 
     //errordefers and added a hash getter, and hash formatter for index.bin
     const xbuildbytes = try fetchraw(allocator, io, xbuildurl);
@@ -140,7 +134,7 @@ pub fn remote_fetch(io: std.Io, allocator: std.mem.Allocator, package: []const u
     const avhash = try utils.security.get_hashb(xbuildbytes);
 
     if (!std.mem.eql(u8,  &avhash, &pkg.xhash)) {
-        wprint("hash of package in index does not match the one that was downloaded\n", .{});
+        log.warn("hash of package in index does not match the one that was downloaded\n", .{});
         return error.xbuildhashmismatch;
     }
 

@@ -3,7 +3,9 @@ const std = @import("std");
 const globals = @import("globals.zig");
 const utils = @import("utils/utils.zig");
 const installer = @import("installer.zig");
-const print = std.debug.print;
+const log = @import("utils/log.zig");
+const config = @import("config.zig");
+const removal = @import("remove/remove.zig");
 
 // globals here
 const allocator = std.heap.smp_allocator; // for actual programs, arena allocator below for args (because frees all at once at program end)
@@ -31,21 +33,6 @@ const allocator = std.heap.smp_allocator; // for actual programs, arena allocato
 // this makes reading really easy because you can just look at the end of the function to see what it needs
 
 
-// macros for prints ()
-// only place i used comptime so far
-inline fn errprint(comptime fmt: []const u8, args: anytype) void {
-    print("[x] " ++ fmt, args);
-}
-
-inline fn iprint(comptime fmt: []const u8, args: anytype) void {
-    print("[*] " ++ fmt, args);
-}
-
-inline fn wprint(comptime fmt: []const u8, args: anytype) void {
-    print("[!] " ++ fmt, args);
-}
-
-
 fn createdir(io: std.Io, path: []const u8) !void {
     std.Io.Dir.createDirAbsolute(
         io,
@@ -70,7 +57,7 @@ pub fn ensure_xpk(io: std.Io) !void {
     try utils.cli.root();
 
     // set up all globals
-    iprint("setting up globals...\n", .{});
+    log.info("setting up globals...\n", .{});
     try createdir(io, globals.base);
     try createdir(io, globals.db);
     try createdir(io, globals.local);
@@ -78,7 +65,7 @@ pub fn ensure_xpk(io: std.Io) !void {
     try utils.sync.init_repo(io);
 
 
-    iprint("done settin up xpk! enjoy!!\n", .{});
+    log.info("done settin up xpk! enjoy!!\n", .{});
     // drop
     const file = try std.Io.Dir.createFileAbsolute(io, globals.firstrun, .{ .truncate = false });
     defer file.close(io);
@@ -95,11 +82,14 @@ pub fn main(init: std.process.Init) !void {
 
     // creation all in function
     try ensure_xpk(io);
+    const cfg = try config.load(io, arena); // arena is fine here, since its read once and freed all at once after exit
+    config.apply(cfg);
+    
 
     // args[1] is cmd.
 
     if (args.len < 2) {
-        iprint("usage: xpk <action> for more info do 'xpk help'\n", .{});
+        log.info("usage: xpk <action> for more info do 'xpk help'\n", .{});
         return;
     } else 
     
@@ -111,7 +101,7 @@ pub fn main(init: std.process.Init) !void {
     
     if (std.mem.eql(u8, args[1], "add") or std.mem.eql(u8, args[1], "-a") or std.mem.eql(u8, args[1], "install")) {
         if (args.len < 3) {
-            iprint("usage is xpk install <package>\n", .{});
+            log.info("usage is xpk install <package>\n", .{});
             return;
         }
         try utils.cli.root();
@@ -119,6 +109,13 @@ pub fn main(init: std.process.Init) !void {
         try utils.cli.package_confirm(io, package);
         try installer.get_package(io, allocator, package);
         return;
+    } else 
+
+    if (std.mem.eql(u8, args[1], "remove")) {
+        const package = args[2];
+        try utils.cli.root();
+        try utils.cli.global_confirm(io);
+        try removal.remove(io, allocator, package);
     } else 
 
     if (std.mem.eql(u8, args[1], "list")) {
@@ -143,17 +140,17 @@ pub fn main(init: std.process.Init) !void {
     // index requires root now because of the key signing system
     if (std.mem.eql(u8, args[1], "index")) {
         if (args.len < 3) {
-            iprint("usage is xpk index <path to repo, locally>\n", .{});
+            log.info("usage is xpk index <path to repo, locally>\n", .{});
             return;
         }
         try utils.cli.root();
         const kp = utils.security.key_l(io) catch |err| switch (err) {
             error.FileNotFound => {
-                wprint("no signing key found, run 'xpk keygen' first\n", .{});
+                log.warn("no signing key found, run 'xpk keygen' first\n", .{});
                 return;
             },
             error.insecurekeypermissions => {
-                errprint("signing key has bad permissions, refusing to index see the earlier warning\n", .{});
+                log.err("signing key has bad permissions, refusing to index see the earlier warning\n", .{});
                 return;
             },
         else => return err,
@@ -173,7 +170,7 @@ pub fn main(init: std.process.Init) !void {
     }
 
     else {
-        wprint("what the hell does that mean. \n", .{});
+        log.warn("what the hell does that mean. \n", .{});
     }
     
 }

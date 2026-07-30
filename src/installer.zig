@@ -1,22 +1,10 @@
+//! installer file,kind of the neo src/download/fetch.zig, but insteaf 100000x better then that
 const std = @import("std");
 const utils = @import("utils/utils.zig");
 const globals = @import("globals.zig");
 const db = @import("db/db.zig");
 const install = @import("install/install.zig").install;
-const print = std.debug.print;
-
-
-inline fn errprint(comptime fmt: []const u8, args: anytype) void {
-    print("[x] " ++ fmt, args);
-}
-
-inline fn iprint(comptime fmt: []const u8, args: anytype) void {
-    print("[*] " ++ fmt, args);
-}
-
-inline fn wprint(comptime fmt: []const u8, args: anytype) void {
-    print("[!] " ++ fmt, args);
-}
+const log = @import("utils/log.zig");
 
 pub fn get_package(io: std.Io, allocator: std.mem.Allocator, package: [:0]const u8) !void {
     var pkgurl = try utils.installer.remote_fetch(io, allocator, package);
@@ -26,7 +14,7 @@ pub fn get_package(io: std.Io, allocator: std.mem.Allocator, package: [:0]const 
     const xbuild = try utils.parser.parse_a(allocator, pkgurl.xbuild.?);
 
 
-    iprint("downloading {s}", .{package});
+    log.info("downloading {s}", .{package});
     
     const tarball = try utils.installer.download(io, allocator, xbuild.pkg.src_url, false);
 
@@ -35,7 +23,7 @@ pub fn get_package(io: std.Io, allocator: std.mem.Allocator, package: [:0]const 
 
     // safety first kids
     if (!try utils.security.get_hash(tarballhandle, io, xbuild.pkg.sha256sum)) {
-        errprint("sha256 checksum verification failed\n", .{});
+        log.err("sha256 checksum verification failed\n", .{});
         return error.invalidchecksum;
     }
 
@@ -61,5 +49,5 @@ pub fn get_package(io: std.Io, allocator: std.mem.Allocator, package: [:0]const 
     try install(io,allocator,out,pkgurl.repo,xbuild.info.name,pkgurl.category,xbuild.info.version,pkgurl.hash,xbuild.build.build_sys);
     
 
-    iprint("installed {s} {s}\n", .{xbuild.info.name, xbuild.info.version});
+    log.info("installed {s} {s}\n", .{xbuild.info.name, xbuild.info.version});
 }  
