@@ -39,8 +39,7 @@ pub fn list(io: std.Io, allocator: std.mem.Allocator) !void {
 
         log.debug2("repo '{s}' contains {d} generation entries\n", .{repo.name, entries.len});
 
-        // dedupe down to one "current" (highest generation) entry per package name,
-        // otherwise every past generation shows up as its own duplicate line
+        // dedupe
         var seen: std.StringHashMap(void) = .init(allocator);
         defer seen.deinit();
 

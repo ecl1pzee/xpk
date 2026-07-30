@@ -14,7 +14,6 @@ const print = std.debug.print;
 
 fn build_url(allocator: std.mem.Allocator, repourl: []const u8, headstr: []const u8,subpath: []const u8) ![]u8 {
     if (std.mem.indexOf(u8, repourl, "github") != null) {
-        // repourl = ".../<owner>/<repo>/<branch>", we want ".../<owner>/<repo>/<headstr>"  
         const branchstart = std.mem.lastIndexOfScalar(u8, repourl, '/') orelse {
             // no '/' found at all, malformed url, just fall through unpinned, and probably fail
             return try std.fmt.allocPrint(allocator, "{s}/{s}", .{ repourl, subpath });
