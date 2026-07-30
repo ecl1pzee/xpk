@@ -1,11 +1,6 @@
 const std = @import("std");
 
-// binary layout (index.bin, my v2):
-//   hash:  32 bytes   sha256 bytes
-//   name:  u16 (LE)   name bytes
-//   cat:   u16 (LE)   category bytes
-//   ver:   u16 (LE)   version bytes
-//   desc:  u16 (LE)   description bytes
+
 // fields are in this order, so they can be parsed (duh)
 pub const Idxentry = struct {
     xhash: [32]u8,

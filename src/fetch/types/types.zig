@@ -1,8 +1,13 @@
 const std = @import("std");
 
+
+// added more options because we need our install shit to know alot
 pub const Pkgurl = struct {
     allocator: std.mem.Allocator,
     xbuild: ?[]const u8,
+    repo: []const u8,
+    category: []const u8,
+    hash: [32]u8,
 
     pub fn deinit(self: *Pkgurl) void {
         if (self.xbuild) |m| self.allocator.free(m);

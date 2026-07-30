@@ -78,7 +78,7 @@ pub fn ensure_xpk(io: std.Io) !void {
     try utils.sync.init_repo(io);
 
 
-    iprint("done settin up xpk! enjoy!!", .{});
+    iprint("done settin up xpk! enjoy!!\n", .{});
     // drop
     const file = try std.Io.Dir.createFileAbsolute(io, globals.firstrun, .{ .truncate = false });
     defer file.close(io);
@@ -121,11 +121,24 @@ pub fn main(init: std.process.Init) !void {
         return;
     } else 
 
+    if (std.mem.eql(u8, args[1], "list")) {
+        try utils.misc.list(io, allocator);
+    } else 
+
+    if (std.mem.eql(u8, args[1], "info")) {
+        const package = args[2];
+        try utils.misc.info(io, allocator, package);
+    } else 
+
+    if (std.mem.eql(u8, args[1], "search") or std.mem.eql(u8, args[1], "-s")) {
+        const query = args[2];
+        try utils.misc.search(io, allocator, query);
+    } else 
+
     if (std.mem.eql(u8, args[1], "version") or std.mem.eql(u8, args[1] ,"-v")) {
         utils.cli.version();
         return;
     } else 
-
 
     // index requires root now because of the key signing system
     if (std.mem.eql(u8, args[1], "index")) {
@@ -148,7 +161,8 @@ pub fn main(init: std.process.Init) !void {
         try utils.indexer.index_repo(io, allocator, args[2], kp);
     } else 
 
-    if (std.mem.eql(u8, args[1], "pull") or std.mem.eql(u8, args[1], "sync")) {
+    if (std.mem.eql(u8, args[1], "pull") or std.mem.eql(u8, args[1], "sync") or std.mem.eql(u8, args[1], "-p")) {
+        try utils.cli.root();
         try utils.sync.pull_repo(io, allocator);
         return;
     } else 

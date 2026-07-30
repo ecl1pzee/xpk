@@ -11,6 +11,7 @@ const dispatcher = @import("../build/dispatch.zig");
 const extractor = @import("../extract/extract.zig");
 const verity = @import("../security/verify.zig"); // ask me anything
 const keygen = @import("../security/keygen.zig");
+const mlist = @import("../misc/list.zig");
 
 
 pub const cli = struct {
@@ -65,5 +66,7 @@ pub const security = struct {
 };
 
 pub const misc = struct {
-    // to be coming
+    pub const list = mlist.list;
+    pub const search = mlist.search;
+    pub const info = mlist.info;
 };

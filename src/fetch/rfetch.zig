@@ -22,7 +22,7 @@ fn build_url(allocator: std.mem.Allocator, repourl: []const u8, headstr: []const
         return try std.fmt.allocPrint(allocator, "{s}/{s}/{s}", .{ base, headstr, subpath });
     } 
 
-    // add elsestatemnts: codeberg.org / raw.codeberg.org uses a different raw-url shape
+    // add elsestatemnts for codeberg.org / raw.codeberg.org uses a different raw-url shape
     
     // unknown host, so just return normally
     return try std.fmt.allocPrint(allocator, "{s}/{s}", .{ repourl, subpath });
@@ -68,15 +68,16 @@ fn format_head(allocator: std.mem.Allocator, head: [32]u8) ![]u8 {
     return try std.fmt.allocPrint(allocator, "{x}", .{head[0..len]});
 }
 
-// checks your index.bin's from each repo
+// checks your indexes from each repo
 pub fn remote_fetch(io: std.Io, allocator: std.mem.Allocator, package: []const u8) !types.Pkgurl {
     const reposbytes = try std.Io.Dir.cwd().readFileAlloc(io, globals.reposconf, allocator, .unlimited);
     defer allocator.free(reposbytes);
 
     const repos = try utils.parser.parse_r(allocator, reposbytes);
-    defer allocator.free(repos);
-
-    var foundrepo: ?utils.parser.Repo = null;
+ 
+    // we use invidial ones instead of 'foundrepo' because with foundrepo it fucks over after
+    var foundreponame: ?[]u8 = null;
+    var foundrepourl: ?[]u8 = null;
     var foundpkg: ?types.Idxentry = null;
     var foundhead: [32]u8 = undefined;
 
@@ -97,17 +98,20 @@ pub fn remote_fetch(io: std.Io, allocator: std.mem.Allocator, package: []const u
 
         // uses the parsed offset table and find_package to find the package
         if (types.find_package(indexbytes, parsed.offsets, parsed.entriesst, package)) |entry| {
-            foundrepo = repo;
+         
+            foundreponame = try allocator.dupe(u8, repo.name);
+            foundrepourl = try allocator.dupe(u8, repo.url);
+
+  
             foundpkg = entry;
             foundhead = parsed.head;
             break;
         }
     }
 
-    const repo = foundrepo orelse {
-        wprint("package {s} doesn't exist in any enabled repo\n", .{package});
-        std.process.exit(1);
-    };
+    
+    const reponame = foundreponame orelse unreachable;
+    const repourl = foundrepourl orelse unreachable;
 
     const pkg = foundpkg orelse {
         wprint("package {s} doesn't exist in any enabled repo\n", .{package});
@@ -123,7 +127,7 @@ pub fn remote_fetch(io: std.Io, allocator: std.mem.Allocator, package: []const u
     defer allocator.free(path);
 
     // pins the fetch to the exact commit the index was generated from instead of just getting things from latest commit, this is good for both safety and reliablity, because syncing = downloading a newer commit with newer hash, which means newer versions, unlike old syncing that was just adding packages
-    const xbuildurl = try build_url(allocator, repo.url, headstr, path);
+    const xbuildurl = try build_url(allocator, repourl, headstr, path);
     defer allocator.free(xbuildurl);
 
     
@@ -136,10 +140,11 @@ pub fn remote_fetch(io: std.Io, allocator: std.mem.Allocator, package: []const u
     const avhash = try utils.security.get_hashb(xbuildbytes);
 
     if (!std.mem.eql(u8,  &avhash, &pkg.xhash)) {
-        wprint("hash of package in index.bin does not match the one that was downloaded\n", .{});
+        wprint("hash of package in index does not match the one that was downloaded\n", .{});
         return error.xbuildhashmismatch;
     }
 
-
-    return types.Pkgurl{ .allocator = allocator, .xbuild = xbuildbytes };
+    // need more shit 
+    return types.Pkgurl{.allocator = allocator, .xbuild = xbuildbytes, .repo = reponame, .category = pkg.category, .hash = pkg.xhash};
+    
 }

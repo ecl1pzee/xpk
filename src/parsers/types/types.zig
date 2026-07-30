@@ -1,6 +1,6 @@
 const std = @import("std");
 
-// changes for automl
+// changes for automl, after this comit im gonna work on automl
 pub const Info = struct {
     homepage: []const u8 = "",
     upstream: ?[]const u8 = "",

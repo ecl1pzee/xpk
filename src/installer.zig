@@ -1,6 +1,8 @@
 const std = @import("std");
 const utils = @import("utils/utils.zig");
 const globals = @import("globals.zig");
+const db = @import("db/db.zig");
+const install = @import("install/install.zig").install;
 const print = std.debug.print;
 
 
@@ -29,6 +31,7 @@ pub fn get_package(io: std.Io, allocator: std.mem.Allocator, package: [:0]const 
     const tarball = try utils.installer.download(io, allocator, xbuild.pkg.src_url, false);
 
     const tarballhandle = try std.Io.Dir.openFileAbsolute(io, tarball, .{.mode = .read_only});
+    defer tarballhandle.close(io);
 
     // safety first kids
     if (!try utils.security.get_hash(tarballhandle, io, xbuild.pkg.sha256sum)) {
@@ -48,8 +51,15 @@ pub fn get_package(io: std.Io, allocator: std.mem.Allocator, package: [:0]const 
         }
     }
 
+    
     const out = try utils.extract.extract_tar(io, allocator, tarball, strip);
 
     // i need this to return something later so when i make an installer it can grab like, yeah idk
     try utils.builder.run_build(io, allocator, xbuild.build, xbuild.pkg, out);
+
+    
+    try install(io,allocator,out,pkgurl.repo,xbuild.info.name,pkgurl.category,xbuild.info.version,pkgurl.hash,xbuild.build.build_sys);
+    
+
+    iprint("installed {s} {s}\n", .{xbuild.info.name, xbuild.info.version});
 }  

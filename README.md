@@ -8,7 +8,10 @@ The XPK package manager
 Our discord: https://discord.gg/sDphynpzW
 
 XPK is a source, and binary based package manager
-that aims to be powerful, simple and user friendly
+that aims to be secure, powerful and user friendly, while also being highly debuggable!
+
+currently, the package manager can install packages, and list packages (no removal yet)
+next commits will add removal support, and a config file.
 
 It supports:
 1. musl  systems
@@ -89,4 +92,4 @@ Check out our other projects!
 ====
 ###  <p align="middle"><em>maintained by <a href="https://github.com/aureliusxyz">aurelius</a></em></p>
 ### [automl](https://github.com/aureliusxyz/automl)
-*A small, portable TOML-ish parser for xpk with zero deps, dotted sections, nested arrays, pretty diagnostics.*
+*A small, portable TOML-ish parser library with zero deps, dotted sections, nested arrays, pretty diagnostics.*

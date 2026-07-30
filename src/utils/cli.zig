@@ -50,7 +50,7 @@ fn isroot() bool {
         .netbsd => std.c.getuid() == 0,
         .freebsd => std.c.getuid() == 0,
         .openbsd => std.c.getuid() == 0,
-        else => @compileError("not supported OS")
+        else => @compileError("not supported Os")
     };
 }
 
@@ -75,8 +75,8 @@ pub fn global_confirmer(io: std.Io) !void {
     } else if (std.mem.eql(u8,"no", input) or std.mem.eql(u8, "n", input) or std.mem.eql(u8, "N", input) or std.mem.eql(u8, "No", input)) {
         std.process.exit(1);
     } else {
-        wprint("what? returning. \n", .{});
-        return;
+        wprint("what?\n", .{});
+        std.process.exit(1);
     }
 }
 
@@ -94,14 +94,15 @@ pub fn package_confirm(io: std.Io, package: [:0]const u8) !void {
     } else if (std.mem.eql(u8,"no", input) or std.mem.eql(u8, "n", input) or std.mem.eql(u8, "N", input) or std.mem.eql(u8, "No", input)) {
         std.process.exit(1);
     } else {
-        wprint("what? returning.\n", .{});
-        return;
+        wprint("what?\n", .{});
+        std.process.exit(1);
     }
 }
 
+// yeah. it is v0.1, because v1 would be a complete 'package manager' with high support, a v3 would be 2 revamps and great ones of it.
 pub fn version() void {
     print(
-        \\version 0.1.2.3.4.5.6.7, brought to you by sundowner and firewalld, revamp of our beautiful: neo
+        \\version 0.1, brought to you by sundowner and firewalld, revamp of our beautiful: neo
         \\further development at (yo put new github repo here)
         \\
     ,.{});
