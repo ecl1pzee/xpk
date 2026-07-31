@@ -74,7 +74,7 @@ pub fn remove(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u8) !vo
     var loaded = try objects.load_tree(io, allocator, owner.entry.objhash);
     defer loaded.deinit(allocator);
 
-    log.trace("unlinking {d} paths\n", .{loaded.entries.len});
+    log.info("unlinking {d} paths\n", .{loaded.entries.len});
     try unlink_paths(io, allocator, loaded.entries);
 
     try db.remove_i(io, allocator, owner.repo.name, pkgname);
