@@ -156,6 +156,7 @@ pub fn main(init: std.process.Init) !void {
     } else 
 
     // index requires root now because of the key signing system
+    // i also have to fix this tmrw 
     if (std.mem.eql(u8, args[1], "index")) {
         if (args.len < 3) {
             log.info("usage is xpk index <path to repo, locally>\n", .{});
