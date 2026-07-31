@@ -15,6 +15,21 @@ fn createdir(io: std.Io, path: []const u8) !void {
 
 // only made to chown for destdir, thats it
 
+fn strip_tree(io: std.Io, allocator: std.mem.Allocator, destdir: []const u8, paths: []const []const u8) !void {
+    for (paths) |rel| {
+        const fullpath = try std.fs.path.join(allocator, &.{ destdir, rel });
+        defer allocator.free(fullpath);
+
+        var child = std.process.spawn(io, .{
+            .argv = &.{ "strip", "-S", fullpath },
+            .stdout = .ignore,
+            .stderr = .ignore,
+        }) catch continue;
+
+        _ = child.wait(io) catch {};
+    }
+}
+
 fn destdir_chown(io: std.Io, path: []const u8) !void {
     log.debug1("changing ownership of staging directory: {s}\n", .{path});
 
@@ -170,6 +185,9 @@ pub fn install(io: std.Io, allocator: std.mem.Allocator, sourced: []const u8, re
         return error.emptyinstall;
     }
 
+    log.debug1("stripping debug symbols from staged binaries\n", .{});
+    try strip_tree(io, allocator, destdir, paths);
+
     const pairs = try build_pairs(allocator, paths);
     defer allocator.free(pairs);
 
@@ -195,6 +213,7 @@ pub fn install(io: std.Io, allocator: std.mem.Allocator, sourced: []const u8, re
 
     // write entry in database per repo, generation gets assigned by record_i itself, so we pass 0 to gen
     log.debug3("recording db entry\n", .{});
+    
     try db.record_i(io, allocator, .{
         .name = pkgname,
         .category = category,

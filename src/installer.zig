@@ -6,6 +6,7 @@ const db = @import("db/db.zig");
 const install = @import("install/install.zig").install;
 const log = @import("utils/log.zig");
 
+
 pub fn get_package(io: std.Io, allocator: std.mem.Allocator, package: [:0]const u8) !void {
     var pkgurl = try utils.installer.remote_fetch(io, allocator, package);
     defer pkgurl.deinit();

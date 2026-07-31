@@ -98,7 +98,7 @@ pub const Config = struct {
     verify_sig: bool = true,          // require valid sigs
 
     // [sandbox] (future)
-    sandbox: bool = false,           // master toggle for sandboxed builds, will get its own wrapper
+    sandbox: bool = true,           // master toggle for sandboxed builds, will get its own wrapper
     sandbox_net: bool = false,        // whether sandboxed build steps get network access at all, usually not (arch gotta learn from us foreallll)
 
     // [misc]
