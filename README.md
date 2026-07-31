@@ -10,8 +10,6 @@ Our discord: https://discord.gg/sDphynpzW
 XPK is a source, and binary based package manager
 that aims to be secure, powerful and user friendly, while also being highly debuggable!
 
-currently, the package manager can install packages, and list packages (no removal yet)
-next commits will add removal support, and a config file.
 
 It supports:
 1. musl  systems
