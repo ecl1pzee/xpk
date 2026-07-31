@@ -10,12 +10,27 @@ Our discord: https://discord.gg/sDphynpzW
 XPK is a source, and binary based package manager
 that aims to be secure, powerful and user friendly, while also being highly debuggable!
 
-XPK follows the philosophy of OStree, although im not done with the new idea.
+Philosophy
+=========
+**XPK** is a source and binary package manager designed to be secure, atomic, powerful, and highly debuggable without sacrificing ease of use.
 
-(idea is, instead of pointless hashes since we cant even reproduce most packages): we use diffs between filesystem snapshots, well we are gonna use them, i havent actually done anything.
-so a package can look like /opt/xpk/objects/cmatrix-2.0-(hashdiff) - cmatrix-2.0-(otherhashdifference,generations)
-and, the main purpose is to have atomic upgrades/updates between all environments by building a filesystem first
+This design is inspired by the philosophy behind OSTree: the operating system should be deployed as a complete, consistent state instead of being modified incrementally. However, XPK remains a traditional package manager, supporting both source-based and binary packages while providing atomic deployments and reliable rollbacks.
 
+Unlike systems that depend on fully reproducible builds, XPK acknowledges that many real world packages cannot currently be reproduced bit-for-bit. Instead of relying solely on reproducible package outputs, XPK records the resulting filesystem state after each successful transaction. These filesystem generations become the canonical representation of the installed system.
+
+To minimize storage usage, XPK stores efficient filesystem differences between generations whenever possible while preserving the ability to reconstruct complete states. This allows multiple generations to coexist without duplicating unchanged data, enabling fast upgrades, rollbacks, and historical inspection.
+
+Every transaction produces a new generation of the affected package or environment. Previous generations remain available until explicitly removed, allowing users to instantly revert failed upgrades, compare changes between versions, or inspect exactly what was modified during any transaction.
+
+Security is a the biggest design goal. Packages are isolated during builds, repository metadata and package contents are cryptographically verified, and installations are never allowed to leave the system in a partially updated state. Every operation is deterministic from the package manager's perspective: either the entire transaction succeeds and becomes active, or nothing changes.
+
+XPK also separates package construction from deployment. Source packages are built in isolated environments to produce a complete filesystem tree, while binary packages provide pre built trees ready for deployment. 
+
+
+
+
+Compatibility 
+==============
 It supports:
 1. musl  systems
 2. glibc systems
