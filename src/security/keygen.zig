@@ -37,7 +37,7 @@ fn createdir(io: std.Io, path: []const u8) !void {
 }
 
 
-// generates a new ed25519 keypair for signing index AND verifying
+// generates a new ed25519 keypair for signing index, not veriyifying shit because the user verifies via keyring
 pub fn generate(io: std.Io) !void {
     log.trace("starting key generation\n", .{});
 

@@ -28,8 +28,6 @@ fn build_url(allocator: std.mem.Allocator, repourl: []const u8, headstr: []const
     return try std.fmt.allocPrint(allocator, "{s}/{s}", .{ repourl, subpath });
 }
 
-
-
 // taken from neo, only thing implemented new is the limit, so malicious gigantic package specs/infos cant lag you (unless you are lacking 8192 bytes of ram)
 fn fetchraw(allocator: std.mem.Allocator, io: std.Io, url: []const u8) ![]u8 {
     var client = std.http.Client{ .allocator = allocator, .io = io };
@@ -133,7 +131,7 @@ pub fn remote_fetch(io: std.Io, allocator: std.mem.Allocator, package: []const u
     const avhash = try utils.security.get_hashb(xbuildbytes);
 
     if (!std.mem.eql(u8,  &avhash, &pkg.xhash)) {
-        log.warn("hash of package in index does not match the one that was downloaded\n", .{});
+        log.err("hash of package in index does not match the one that was downloaded\n", .{});
         return error.xbuildhashmismatch;
     }
 

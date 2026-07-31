@@ -10,7 +10,7 @@ pub const Sandboxopts = struct {
 };
 
 
-
+// this will grow and become a big ass global, but this works right now for a majority of packages ive tested (like 2)  so its fine
 fn build_mprofile(allocator: std.mem.Allocator, opts: Sandboxopts) ![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -48,7 +48,7 @@ fn build_mprofile(allocator: std.mem.Allocator, opts: Sandboxopts) ![]u8 {
     }
 
     if (opts.allownet) {
-        try out.appendSlice(allocator, "(allow network*)\n");
+        try out.appendSlice(allocator, "(allow network*)\n"); // i'd keep disabled
     }
 
     return out.toOwnedSlice(allocator);
@@ -64,6 +64,10 @@ pub const Wrapped = struct {
     }
 };
 
+
+// linux sandboxing is gonna be rawnamespaces, no dependencies.
+// the only reason i use sandbox-exec for macos is because it comes entirely preinstalled into unwritable /usr/bin, so no point at all to write my own, however:
+// for linux, and freebsd, and maybe macos in the future ill design a global one, however for most of the lifespan until a v1/v2 sandboxexec will be used to wrap shell for macos
 pub fn wrap(io: std.Io, allocator: std.mem.Allocator, argv: []const []const u8, opts: Sandboxopts) !Wrapped {
     switch (builtin.os.tag) {
         .macos => {

@@ -5,15 +5,15 @@ const globals = @import("globals.zig");
 const db = @import("db/db.zig");
 const install = @import("install/install.zig").install;
 const log = @import("utils/log.zig");
-
+const config = @import("config.zig");
 
 pub fn get_package(io: std.Io, allocator: std.mem.Allocator, package: [:0]const u8) !void {
+    try tmp_chown(io, globals.tmp);
     var pkgurl = try utils.installer.remote_fetch(io, allocator, package);
     defer pkgurl.deinit();
     
     // before i did renaming i still had pkgurl.manifest, and i was too lazy to change to pkurl.info
     const xbuild = try utils.parser.parse_a(allocator, pkgurl.xbuild.?);
-
 
     log.info("downloading {s}", .{package});
     
@@ -49,6 +49,33 @@ pub fn get_package(io: std.Io, allocator: std.mem.Allocator, package: [:0]const 
     
     try install(io,allocator,out,pkgurl.repo,xbuild.info.name,pkgurl.category,xbuild.info.version,pkgurl.hash,xbuild.build.build_sys);
     
+    log.debug1("claning up /tmp/xpk artifacts\n", .{});
+    
+    {
+        var parent = try std.Io.Dir.openDirAbsolute(io, "/tmp", .{});
+        defer parent.close(io);
+        parent.deleteTree(io, "xpk") catch |err|  {
+            log.err("error, was not able to delete /tmp artifacts", .{});
+            return err;
+        };
+    }
 
-    log.info("installed {s} {s}\n", .{xbuild.info.name, xbuild.info.version});
+    log.success("installed {s} {s}\n", .{xbuild.info.name, xbuild.info.version});
 }  
+
+fn tmp_chown(io: std.Io, path: []const u8) !void {
+    var child = try std.process.spawn(io, .{
+        .argv = &.{ "chown", "-R", config.current.build_usr, path },
+        .stdout = .ignore,
+        .stderr = .inherit,
+    });
+    switch (try child.wait(io)) {
+        .exited => |code| {
+            if (code != 0) {
+                log.err("failed to chown {s} to build user, exit {d}\n", .{ path, code });
+                return error.chownfailed;
+            }
+        },
+        else => return error.chownfailed,
+    }
+}

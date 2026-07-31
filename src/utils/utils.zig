@@ -74,4 +74,5 @@ pub const misc = struct {
 
 pub const fs = struct {
     pub const createdir = fsutil.createdir;
+    pub const rename = fsutil.rename;
 };

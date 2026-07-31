@@ -14,18 +14,19 @@ Philosophy
 =========
 **XPK** is a source and binary package manager designed to be secure, atomic, powerful, and highly debuggable without sacrificing ease of use.
 
-This design is inspired by the philosophy behind OSTree: the operating system should be deployed as a complete, consistent state instead of being modified incrementally. However, XPK remains a traditional package manager, supporting both source-based and binary packages while providing atomic deployments and reliable rollbacks.
+This design is inspired by the philosophy behind OSTree: the operating system should be deployed as a complete, consistent state instead of being modified incrementally. However, XPK remains a traditional package manager, supporting both source based and binary packages while providing atomic deployments and reliable rollbacks.
 
-Unlike systems that depend on fully reproducible builds, XPK acknowledges that many real world packages cannot currently be reproduced bit-for-bit. Instead of relying solely on reproducible package outputs, XPK records the resulting filesystem state after each successful transaction. These filesystem generations become the canonical representation of the installed system.
+Unlike systems that depend on fully reproducible builds, XPK acknowledges that many real world packages cannot currently be reproduced bit by bit, Instead of relying solely on reproducible package outputs, XPK has good security, and focuses on a more customisable and non bloatful approach.
 
 To minimize storage usage, XPK stores efficient filesystem differences between generations whenever possible while preserving the ability to reconstruct complete states. This allows multiple generations to coexist without duplicating unchanged data, enabling fast upgrades, rollbacks, and historical inspection.
 
-Every transaction produces a new generation of the affected package or environment. Previous generations remain available until explicitly removed, allowing users to instantly revert failed upgrades, compare changes between versions, or inspect exactly what was modified during any transaction.
+Every download produces a new generation of the affected package or environment. Previous generations remain available until explicitly removed with the (upcoming gc), allowing users to instantly revert failed upgrades, compare changes between versions, or inspect exactly what was modified during any transaction.
 
-Security is a the biggest design goal. Packages are isolated during builds, repository metadata and package contents are cryptographically verified, and installations are never allowed to leave the system in a partially updated state. Every operation is deterministic from the package manager's perspective: either the entire transaction succeeds and becomes active, or nothing changes.
+Security is a the biggest design goal. Packages are isolated during builds, repository metadata and package contents are cryptographically verified, and installations are never allowed to leave the system in a partially updated state. Every operation is deterministic from the package manager's perspective either the entire transaction succeeds and becomes active, or nothing changes.
 
 XPK also separates package construction from deployment. Source packages are built in isolated environments to produce a complete filesystem tree, while binary packages provide pre built trees ready for deployment. 
 
+Although, in v2 of the package manager, reproducible builds will infact be added simply for the sake of security, possibly as a toggled option or default.
 
 
 

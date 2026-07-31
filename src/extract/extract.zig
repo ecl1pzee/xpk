@@ -13,8 +13,6 @@ fn createdir(io: std.Io, path: []const u8) !void {
     return utils.fs.createdir(io, path);
 }
 
-
-
 // extract tar, does what it says
 pub fn extract_tar(io: std.Io, allocator: std.mem.Allocator, tarballpath: []const u8, strip: u32) ![]const u8 {
 
@@ -47,6 +45,7 @@ pub fn extract_tar(io: std.Io, allocator: std.mem.Allocator, tarballpath: []cons
     
 
     // ill support more compression algos next time because im pretty sure zig allows more like lzma (NO one is using it)
+    // and i might not support it because we have a pretty accsessible amount of packages we can already decompress. (although bz2 would be needed for some oldd asss ones)
     if (std.mem.endsWith(u8, tarballpath, ".xz")) {
         const dictbuf = try allocator.alloc(u8, 1 << 20);
         defer allocator.free(dictbuf);

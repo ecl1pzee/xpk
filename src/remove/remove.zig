@@ -1,16 +1,22 @@
 //! removal: unlinks a package's symlinks from globals.base, deletes its shit. easy.
+//! rewritten for new ostree approach
 const std = @import("std");
 const globals = @import("../globals.zig");
 const db = @import("../db/db.zig");
-const manifest = @import("../install/types/types.zig");
+const objects = @import("../db/objects.zig");
 const utils = @import("../utils/utils.zig");
 const log = @import("../utils/log.zig");
 
-pub const Removeerror = error{ notinstalled, nomanifest };
+pub const Removeerror = error{notinstalled};
 
-// finds the repo package is installed in
-fn find_owner(io: std.Io, allocator: std.mem.Allocator, repos: []const utils.parser.Repo, name: []const u8) !?utils.parser.Repo {
-    var found: ?utils.parser.Repo = null;
+const Owner = struct {
+    repo: utils.parser.Repo,
+    entry: db.Dbentry,
+};
+
+// finds owner and deletes
+fn find_owner(io: std.Io, allocator: std.mem.Allocator, repos: []const utils.parser.Repo, name: []const u8) !?Owner {
+    var found: ?Owner = null;
     var foundp: i32 = std.math.minInt(i32);
 
     for (repos) |repo| {
@@ -20,10 +26,10 @@ fn find_owner(io: std.Io, allocator: std.mem.Allocator, repos: []const utils.par
         };
         defer allocator.free(entries);
 
-        if (db.current_e(entries, name) == null) continue;
+        const entry = db.current_e(entries, name) orelse continue;
 
         if (repo.priority > foundp) {
-            found = repo;
+            found = .{ .repo = repo, .entry = entry };
             foundp = repo.priority;
         }
     }
@@ -31,31 +37,10 @@ fn find_owner(io: std.Io, allocator: std.mem.Allocator, repos: []const utils.par
     return found;
 }
 
-// reads a package's file manifest, returning the crel paths that were symlinked
-fn read_manifest(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8) ![][]const u8 {
-    const manifestpath = try std.fs.path.join(allocator, &.{ globals.db, reponame, "files", pkgname });
-    defer allocator.free(manifestpath);
-
-    const bytes = std.Io.Dir.cwd().readFileAlloc(io, manifestpath, allocator, .unlimited) catch |err| switch (err) {
-        error.FileNotFound => return Removeerror.nomanifest,
-        else => return err,
-    };
-    defer allocator.free(bytes);
-
-    const borrowed = try manifest.parse_m(bytes, allocator);
-    defer allocator.free(borrowed);
-
-    const owned = try allocator.alloc([]const u8, borrowed.len);
-    errdefer allocator.free(owned);
-    for (borrowed, 0..) |p, i| owned[i] = try allocator.dupe(u8, p);
-
-    return owned;
-}
-
-// unlinks every crel path's symlink from globals.base. missing symlinks.
-fn unlink_paths(io: std.Io, allocator: std.mem.Allocator, paths: []const []const u8) !void {
-    for (paths) |crel| {
-        const linkpath = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ globals.base, crel });
+// missing symlinks are warned
+fn unlink_paths(io: std.Io, allocator: std.mem.Allocator, entries: []const objects.Treeentry) !void {
+    for (entries) |e| {
+        const linkpath = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ globals.base, e.crel });
         defer allocator.free(linkpath);
 
         std.Io.Dir.deleteFileAbsolute(io, linkpath) catch |err| switch (err) {
@@ -69,18 +54,7 @@ fn unlink_paths(io: std.Io, allocator: std.mem.Allocator, paths: []const []const
     }
 }
 
-// deletes the manifest file itself, once its contents have been unlinked.
-fn delete_manifest(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8) !void {
-    const manifestpath = try std.fs.path.join(allocator, &.{ globals.db, reponame, "files", pkgname });
-    defer allocator.free(manifestpath);
-
-    std.Io.Dir.deleteFileAbsolute(io, manifestpath) catch |err| switch (err) {
-        error.FileNotFound => {},
-        else => return err,
-    };
-}
-
-// the actual remove operation: resolve owner -> unlink symlinks -> delete
+// the actual remove operation
 pub fn remove(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u8) !void {
     log.trace("starting removal of {s}\n", .{pkgname});
 
@@ -95,27 +69,15 @@ pub fn remove(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u8) !vo
         return Removeerror.notinstalled;
     };
 
-    log.debug1("{s} is owned by repo '{s}'\n", .{ pkgname, owner.name });
+    log.debug1("{s} is owned by repo '{s}'\n", .{ pkgname, owner.repo.name });
 
-    const paths = read_manifest(io, allocator, owner.name, pkgname) catch |err| switch (err) {
-        Removeerror.nomanifest => {
-            log.warn("no manifest found for {s}, only cleaning up db entries\n", .{pkgname});
-            try db.remove_i(io, allocator, owner.name, pkgname);
-            return;
-        },
-        else => return err,
-    };
-    defer {
-        for (paths) |p| allocator.free(p);
-        allocator.free(paths);
-    }
+    var loaded = try objects.load_tree(io, allocator, owner.entry.objhash);
+    defer loaded.deinit(allocator);
 
-    log.trace("unlinking {d} paths\n", .{paths.len});
-    try unlink_paths(io, allocator, paths);
+    log.trace("unlinking {d} paths\n", .{loaded.entries.len});
+    try unlink_paths(io, allocator, loaded.entries);
 
-    try delete_manifest(io, allocator, owner.name, pkgname);
-
-    try db.remove_i(io, allocator, owner.name, pkgname);
+    try db.remove_i(io, allocator, owner.repo.name, pkgname);
 
     log.success("removed {s}\n", .{pkgname});
 }

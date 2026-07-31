@@ -14,49 +14,10 @@ fn createdir(io: std.Io, path: []const u8) !void {
     return utils.fs.createdir(io, path);
 }
 
-
 // and another one here, because iof the crossdevice bug
 fn rename(io: std.Io, old: []const u8, new: []const u8) !void {
-    std.Io.Dir.renameAbsolute(old, new, io) catch |err| switch (err) {
-        error.CrossDevice => {
-            // rename cannot cross filesystems, so we just stream and delete, also atomic so its better realistically
-
-            const src = try std.Io.Dir.openFileAbsolute(io, old, .{});
-            defer src.close(io);
-
-            const dst = try std.Io.Dir.createFileAbsolute(io, new, .{
-                .truncate = true,
-            });
-            defer dst.close(io);
-
-            var writerbuf: [64 * 1024]u8 = undefined;
-            var fwriter = dst.writer(io, &writerbuf);
-            const writer = &fwriter.interface;
-
-            var buf: [64 * 1024]u8 = undefined;
-            var freader = src.reader(io, &buf);
-            const reader = &freader.interface;
-
-            while (true) {
-                const n = try reader.readSliceShort(&buf);
-                
-
-                if (n == 0)
-                    break;
-
-                try writer.writeAll(buf[0..n]);
-            }
-    
-            try writer.flush();
-
-            try std.Io.Dir.deleteFileAbsolute(io, old);
-        },
-        else => return err,
-    };
+    try utils.fs.rename(io, old, new);
 }
-
-
-
 
 // inits the main repo firstly, used in main right after all creations run, this is gonna uhh change, 100% because this is the commit to github
 pub fn init_repos(io: std.Io) !void {
@@ -69,7 +30,7 @@ pub fn init_repos(io: std.Io) !void {
         \\
     ;
     
-    log.warn("first run of xpk may be quite slow due to initalization!\n", .{});
+    log.info("first run of xpk may be quite slow due to initalization!\n", .{});
 
     if (std.Io.Dir.openFileAbsolute(io, globals.reposconf, .{ .mode = .read_only })) |file| {
         file.close(io);
@@ -128,7 +89,7 @@ fn sync_repo(io: std.Io, allocator: std.mem.Allocator, repo: utils.parser.Repo) 
     defer allocator.free(rawindex);
 
     var signed = types.split_s(rawindex, allocator) catch |err| {
-        log.warn("{s}'s index is malformed or unsigned ({s}), refusing to sync\n", .{ repo.name, @errorName(err) });
+        log.err("{s}'s index is malformed or unsigned ({s}), refusing to sync\n", .{ repo.name, @errorName(err) });
         return error.badindex;
     };
     defer signed.deinit(allocator);

@@ -1,16 +1,10 @@
 const std = @import("std");
 const globals = @import("../globals.zig");
+const utils = @import("../utils/utils.zig");
 const print = std.debug.print;
 // this will have print because frankly 0 fucking need to have anything but normal print for bars
 fn createdir(io: std.Io, path: []const u8) !void {
-    std.Io.Dir.createDirAbsolute(
-        io,
-        path,
-        .default_dir,
-    ) catch |err| switch (err) {
-        error.PathAlreadyExists => {},
-        else => return err,
-    };
+    try utils.fs.createdir(io, path);
 }
 
 // returns path to downloaded file, this will stay but its gonna stay as a function for the multitool ill make with xpk later
@@ -154,7 +148,7 @@ fn moveto(row: usize) void {
     const up = trows - row;
     print("\x1b[{d}A\r\x1b[2K", .{up});
 }
-
+// when a bar finishes
 fn moveback(row: usize) void {
     const up = trows - row;
     print("\x1b[{d}B\r", .{up});
@@ -164,8 +158,10 @@ fn moveback(row: usize) void {
 fn claim_r(io: std.Io) !usize {
     try mutex.lock(io);
     defer mutex.unlock(io);
+    
     const row = trows;
     trows += 1;
+    
     print("\n", .{}); // grow the reserved block by exactly one line, will change later tho to append 3 at the start, or 2
     return row;
 }
@@ -306,7 +302,7 @@ pub fn download_repo(io: std.Io, allocator: std.mem.Allocator, url: []const u8, 
         moveback(row.?);
     }
 
-    try writer.flush(); // flush because _______________
+    try writer.flush(); // flush because writer needs to flush all writing into the i/o scheduler that flushes into file
 
     return outputpath;
 }

@@ -71,22 +71,6 @@ pub fn ensure_xpk(io: std.Io) !void {
     defer file.close(io);
 }
 
-fn tmp_chown(io: std.Io, path: []const u8) !void {
-    var child = try std.process.spawn(io, .{
-        .argv = &.{ "chown", "-R", config.current.build_usr, path },
-        .stdout = .ignore,
-        .stderr = .inherit,
-    });
-    switch (try child.wait(io)) {
-        .exited => |code| {
-            if (code != 0) {
-                log.err("failed to chown {s} to build user, exit {d}\n", .{ path, code });
-                return error.chownfailed;
-            }
-        },
-        else => return error.chownfailed,
-    }
-}
 
 pub fn main(init: std.process.Init) !void {
     const io = init.io; 
@@ -96,7 +80,7 @@ pub fn main(init: std.process.Init) !void {
 
     // tmp is wiped every reboot, so its only normal if i put it in here
     try createdir(io, globals.tmp); 
-    try tmp_chown(io, globals.tmp);
+ 
 
     // creation all in function
     try ensure_xpk(io);

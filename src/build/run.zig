@@ -24,9 +24,9 @@ fn build_dropped(allocator: std.mem.Allocator, argv: []const []const u8) ![]u8 {
     try cmd.appendSlice(allocator, "export PATH=\"");
     try cmd.appendSlice(allocator, config.current.build_path);
     try cmd.appendSlice(allocator, "\"; export TMPDIR=\"/tmp/xpk/\"; ");
-    // try cmd.appendSlice(allocator, "export SOURCE_DATE_EPOCH=\"1735689600\"; "); // instead of the usual 1970, its 2025-01-01, also dont rlly need this anymore since im going a diff approach
+    // try cmd.appendSlice(allocator, "export SOURCE_DATE_EPOCH=\"1735689600\"; "); // instead of the usual 1970, its 2025-01-01, also dont rlly need this anymore since im going a diff approach, or ill use later in v1.5
 
-    // so, this fucks up any build that doesnt support this option but makes cmatrix reproducable, amazing, imma keep commented and fix up a solution tommorow
+    // so, this fucks up any build that doesnt support this option but makes cmatrix reproducable, amazing, imma keep commented and fix up a solution tommorow, or roughly whenever i want reproducible packages
     //if (@import("builtin").target.os.tag == .macos) {
     //   try cmd.appendSlice(allocator, "export LDFLAGS=\"-Wl,-no_uuid\"; ");
     //} 
@@ -39,7 +39,7 @@ fn build_dropped(allocator: std.mem.Allocator, argv: []const []const u8) ![]u8 {
     return cmd.toOwnedSlice(allocator);
 }
 
-// sandboxed
+// sandboxed, allows writable to both /tmp and /private tmp to abide with macos linkings
 pub fn run_step(io: std.Io, allocator: std.mem.Allocator, argv: []const []const u8, cwdp: []const u8) !void {
     const cmd = try build_dropped(allocator, argv);
     defer allocator.free(cmd);
@@ -59,7 +59,7 @@ pub fn run_step(io: std.Io, allocator: std.mem.Allocator, argv: []const []const 
        
         wrapped = try sandbox.wrap(io, allocator, &.{ "sh", "-c", cmd }, opts);
     }
-
+    // wraps args with su in the sandbox
     const suargv: []const []const u8 = if (wrapped) |w|
         &.{ "su", config.current.build_usr, "-c", try join_argv(allocator, w.argv) }
     else

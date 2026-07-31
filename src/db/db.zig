@@ -8,11 +8,9 @@ const log = @import("../utils/log.zig");
 pub const Dbentry = types.Dbentry;
 
 
-
 fn createdir(io: std.Io, path: []const u8) !void {
     return utils.fs.createdir(io, path);
 }
-
 
 
 fn worldpath(allocator: std.mem.Allocator, reponame: []const u8) ![]u8 {
@@ -56,8 +54,7 @@ pub fn write_w(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, e
     try fwriter.interface.flush();
 }
 
-// finds the highest generation number currently recorded for a package name in a repo's world.
-// returns null if the package has no entries at all (fresh install).
+// finds latest gen
 pub fn latest_gen(existing: []const Dbentry, name: []const u8) ?u32 {
     var best: ?u32 = null;
     for (existing) |e| {
@@ -67,8 +64,7 @@ pub fn latest_gen(existing: []const Dbentry, name: []const u8) ?u32 {
     return best;
 }
 
-// returns the entry with the highest generation for a package name, i.e. the "currently active" install.
-// this is what list/search/info should be calling instead of raw iteration, otherwise old generations show up as dupes.
+// returns highest generation
 pub fn current_e(existing: []const Dbentry, name: []const u8) ?Dbentry {
     var best: ?Dbentry = null;
     for (existing) |e| {
@@ -78,10 +74,7 @@ pub fn current_e(existing: []const Dbentry, name: []const u8) ?Dbentry {
     return best;
 }
 
-// records a new generation of an install. never overwrites in place anymore —
-// old generations stay in world so rollback/gc can still see them, we just bump
-// the counter and append. gc (driven by xpk.conf's generation cap, later) is
-// what actually prunes old entries + their now-unreferenced object dirs.
+// record new gen on install
 pub fn record_i(io: std.Io, allocator: std.mem.Allocator, entry: Dbentry) !void {
     const existing = try read_w(io, allocator, entry.repo);
     defer allocator.free(existing);

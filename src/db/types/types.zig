@@ -14,7 +14,7 @@ pub const Dbentry = struct {
     version: []const u8,
     repo: []const u8,       // which repo this came from, helps prevent name cols
     xhash: [32]u8,          // hash of the xbuild that installed it, ties to index
-    objhash: [32]u8,        // hash of the built object tree, ties to /opt/xpk/objects/name-version-(hash goes here)
+    objhash: [32]u8,        // hash of the built object tree
     installedt: i64,        // toseconds timestamp
     generation: u32,        // generation of package
 
