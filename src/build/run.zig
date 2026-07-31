@@ -24,7 +24,7 @@ fn build_dropped(allocator: std.mem.Allocator, argv: []const []const u8) ![]u8 {
     try cmd.appendSlice(allocator, "export PATH=\"");
     try cmd.appendSlice(allocator, config.current.build_path);
     try cmd.appendSlice(allocator, "\"; export TMPDIR=\"/tmp/xpk/\"; ");
-    try cmd.appendSlice(allocator, "export SOURCE_DATE_EPOCH=\"1735689600\"; "); // instead of the usual 1970, its 2025-01-01
+    // try cmd.appendSlice(allocator, "export SOURCE_DATE_EPOCH=\"1735689600\"; "); // instead of the usual 1970, its 2025-01-01, also dont rlly need this anymore since im going a diff approach
 
     // so, this fucks up any build that doesnt support this option but makes cmatrix reproducable, amazing, imma keep commented and fix up a solution tommorow
     //if (@import("builtin").target.os.tag == .macos) {

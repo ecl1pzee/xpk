@@ -10,6 +10,11 @@ Our discord: https://discord.gg/sDphynpzW
 XPK is a source, and binary based package manager
 that aims to be secure, powerful and user friendly, while also being highly debuggable!
 
+XPK follows the philosophy of OStree, although im not done with the new idea.
+
+(idea is, instead of pointless hashes since we cant even reproduce most packages): we use diffs between filesystem snapshots, well we are gonna use them, i havent actually done anything.
+so a package can look like /opt/xpk/objects/cmatrix-2.0-(hashdiff) - cmatrix-2.0-(otherhashdifference,generations)
+and, the main purpose is to have atomic upgrades/updates between all environments by building a filesystem first
 
 It supports:
 1. musl  systems
