@@ -5,7 +5,7 @@ const strata = @import("../db/strata.zig");
 const utils = @import("../utils/utils.zig");
 const log = @import("../utils/log.zig");
 const config = @import("../config.zig");
-
+// forgot to say, first autohashmap usage!!!
 const Hashset = std.AutoHashMap([32]u8, void);
 
 fn read_repos(io: std.Io, allocator: std.mem.Allocator) ![]utils.parser.Repo {
@@ -62,8 +62,7 @@ fn list_diskong(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, 
     return gens.toOwnedSlice(allocator);
 }
 
-// figures out which package names actually have a strata dir for this repo, on disk,
-// so pruning/sweeping isn't solely at the mercy of what db/world happens to remember
+// figures out which package names actually have a strata dir for this repo, on disk
 fn list_ondiskpkgs(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8) ![][]const u8 {
     const repodir = try std.fs.path.join(allocator, &.{ globals.strata, reponame });
     defer allocator.free(repodir);
@@ -89,9 +88,8 @@ fn list_ondiskpkgs(io: std.Io, allocator: std.mem.Allocator, reponame: []const u
     return pkgs.toOwnedSlice(allocator);
 }
 
-// prunes old generations for a single package by walking strata directly (ground truth)
-// instead of trusting db/world's bookkeeping, which can drift. still updates db/world afterward
-// so the two stay in sync, but the decision of "what to delete" is made off the filesystem.
+
+//prune old gens
 fn prune_pkg(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, keep: u32) !usize {
     const ondiskgens = try list_diskong(io, allocator, reponame, pkgname);
     defer allocator.free(ondiskgens);
