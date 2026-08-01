@@ -1,11 +1,12 @@
 const std = @import("std");
-const objects = @import("../db/objects.zig");
+const strata = @import("../db/strata.zig");
 const runner = @import("../build/run.zig");
 const globals = @import("../globals.zig");
 const db = @import("../db/db.zig");
 const log = @import("../utils/log.zig");
 const utils = @import("../utils/utils.zig");
 const config = @import("../config.zig");
+const stratum = @import("../stratum/stratum.zig");
 
 
 fn createdir(io: std.Io, path: []const u8) !void {
@@ -104,10 +105,9 @@ fn crel_of(rel: []const u8) []const u8 {
     else
         rel;
 }
-
 // build tree entry per installed file
-fn build_tree_entries(io: std.Io, allocator: std.mem.Allocator, destdir: []const u8, paths: []const []const u8) ![]objects.Treeentry {
-    const entries = try allocator.alloc(objects.Treeentry, paths.len);
+fn build_treeentries(io: std.Io, allocator: std.mem.Allocator, destdir: []const u8, paths: []const []const u8) ![]strata.Treeentry {
+    const entries = try allocator.alloc(strata.Treeentry, paths.len);
     errdefer allocator.free(entries);
 
     for (paths, 0..) |rel, i| {
@@ -119,7 +119,7 @@ fn build_tree_entries(io: std.Io, allocator: std.mem.Allocator, destdir: []const
         file.close(io);
         const mode = st.permissions.toMode() & 0o777;
 
-        const hash = try objects.store_content(io, allocator, srcpath, mode);
+        const hash = try strata.store_content(io, allocator, srcpath, mode);
 
         entries[i] = .{
             .crel = crel_of(rel),
@@ -131,7 +131,6 @@ fn build_tree_entries(io: std.Io, allocator: std.mem.Allocator, destdir: []const
     return entries;
 }
 
-// the actual thing that installs
 pub fn install(io: std.Io, allocator: std.mem.Allocator, sourced: []const u8, reponame: []const u8, pkgname: []const u8, category: []const u8, version: []const u8, xhash: [32]u8, buildsys: []const u8) !void {
     log.trace("install stage\n", .{});
 
@@ -159,18 +158,32 @@ pub fn install(io: std.Io, allocator: std.mem.Allocator, sourced: []const u8, re
     try strip_tree(io, allocator, destdir, paths);
 
     log.trace("storing {d} files in content store\n", .{paths.len});
-    const treeentries = try build_tree_entries(io, allocator, destdir, paths);
+    const treeentries = try build_treeentries(io, allocator, destdir, paths);
     defer allocator.free(treeentries);
 
     log.debug1("committing tree object\n", .{});
-    const treehash = try objects.commit_tree(io, allocator, treeentries);
+    const treehash = try strata.commit_tree(io, allocator, treeentries);
 
     if (!config.current.keep_stage) {
-        try objects.cleanup_stage(io, destdir);
+        try strata.cleanup_stage(io, destdir);
     }
+    // added some shit here, basically logic for generations, ability to make stratums, and and activation shit
+    const existing = try db.read_w(io, allocator, reponame);
+    defer allocator.free(existing);
+    const nextgen = if (db.latest_gen(existing, pkgname)) |g| g + 1 else 0;
 
-    log.debug1("linking into {s}\n", .{globals.base});
-    try objects.link_tree(io, allocator, treeentries);
+    // materliaze gen drops a hash marker into the generation dir
+    log.debug2("materializing generation {d} for {s}\n", .{ nextgen, pkgname });
+    const gendir = try strata.materialize_genh(io, allocator, reponame, pkgname, nextgen, treehash, treeentries);
+    defer allocator.free(gendir);
+
+    log.debug2("activating generation {d}\n", .{nextgen});
+    try strata.activate_generation(io, allocator, reponame, pkgname, gendir);
+
+    log.debug2("merging into {s}\n", .{globals.base});
+    try strata.merge_tree(io, allocator, treeentries);
+
+       
 
     const timestamp = std.Io.Timestamp.now(io, .real);
 
@@ -181,8 +194,11 @@ pub fn install(io: std.Io, allocator: std.mem.Allocator, sourced: []const u8, re
         .version = version,
         .repo = reponame,
         .xhash = xhash,
-        .objhash = treehash, // tree object hash
+        .objhash = treehash,
         .installedt = timestamp.toSeconds(),
-        .generation = 0, // record_i overwrites this
+        .generation = 0,
     });
+
+    log.debug2("sealing stratum\n", .{});
+    try stratum.seal_stratum(io, allocator, pkgname, .install);
 }

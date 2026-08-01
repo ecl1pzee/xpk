@@ -43,6 +43,11 @@ fn createdir(io: std.Io, path: []const u8) !void {
         else => return err,
     };
 }
+// helper
+fn parglay(arg: []const u8) ?u32 {
+    if (!std.mem.startsWith(u8, arg, "--layer-")) return null;
+    return std.fmt.parseInt(u32, arg["--layer-".len..], 10) catch null;
+}
 
 pub fn ensure_xpk(io: std.Io) !void {
     const marker = std.Io.Dir.openFileAbsolute(io, globals.firstrun, .{ .mode = .read_only }) catch |err| switch (err) {
@@ -81,13 +86,11 @@ pub fn main(init: std.process.Init) !void {
     // tmp is wiped every reboot, so its only normal if i put it in here
     try createdir(io, globals.tmp); 
  
-
     // creation all in function
     try ensure_xpk(io);
     const cfg = try config.load(io, arena); // arena is fine here, since its read once and freed all at once after exit
     config.apply(cfg);
     
-
     // args[1] is cmd.
 
     if (args.len < 2) {
@@ -134,6 +137,67 @@ pub fn main(init: std.process.Init) !void {
         try utils.misc.search(io, allocator, query);
     } else 
 
+    if (std.mem.eql(u8, args[1], "gc")) {
+        try utils.cli.root();
+
+        var keep: u32 = config.current.max_gens;
+
+        if (args.len >= 3) {
+            const arg = args[2];
+            if (std.mem.startsWith(u8, arg, "--keep-")) {
+                keep = std.fmt.parseInt(u32, arg["--keep-".len..], 10) catch blk: {
+                    log.warn("invalid --keep-N value, using configured max generations ({d})\n", .{keep});
+                    break :blk keep;
+                };
+            } else {
+                keep = std.fmt.parseInt(u32, arg, 10) catch blk: {
+                    log.warn("invalid generation count, using configured max generations ({d})\n", .{keep});
+                    break :blk keep;
+                };
+            }
+        }
+
+        try utils.gc.run(io, allocator, keep);
+        return;
+    } else
+
+    if (std.mem.eql(u8, args[1], "rollback")) {
+        try utils.cli.root();
+
+        if (args.len < 3 or std.mem.startsWith(u8, args[2], "--")) {
+            var targetnum: ?u32 = null;
+
+            if (args.len >= 3 and !std.mem.eql(u8, args[2], "--last")) {
+                targetnum = parglay(args[2]) orelse {
+                    log.warn("invalid rollback flag, use --last or --layer-N\n", .{});
+                    return;
+                };
+            }
+
+            try utils.cli.global_confirm(io);
+            try utils.rollback.system(io, allocator, targetnum);
+        } else {
+            const package = args[2];
+            var targetgen: ?u32 = null;
+
+            if (args.len >= 4 and !std.mem.eql(u8, args[3], "--last")) {
+                targetgen = parglay(args[3]) orelse {
+                    log.warn("invalid rollback flag, use --last or --layer-N\n", .{});
+                    return;
+                };
+            }
+
+            try utils.cli.global_confirm(io);
+            try utils.rollback.pkg(io, allocator, package, targetgen);
+        }
+        return;
+    } else
+
+    if (std.mem.eql(u8, args[1], "history")) {
+        try utils.stratum.history(io, allocator);
+        return;
+    } else
+
     if (std.mem.eql(u8, args[1], "version") or std.mem.eql(u8, args[1] ,"-v")) {
         utils.cli.version();
         return;
@@ -141,6 +205,7 @@ pub fn main(init: std.process.Init) !void {
 
     // index requires root now because of the key signing system
     // i also have to fix this tmrw 
+    // yo im not fixing this shit till v1 tbh im too lazy to actually find something that sets environments without shell
     if (std.mem.eql(u8, args[1], "index")) {
         if (args.len < 3) {
             log.info("usage is xpk index <path to repo, locally>\n", .{});

@@ -13,7 +13,9 @@ const verity = @import("../security/verify.zig"); // ask me anything
 const keygen = @import("../security/keygen.zig");
 const mlist = @import("../misc/list.zig");
 const fsutil = @import("fsutil.zig");
-
+const garbage = @import("../gc/gc.zig");
+const stratumforeal = @import("../stratum/stratum.zig");
+const rollbackforeal = @import("../rollback/rollback.zig");
 
 pub const cli = struct {
     pub const helpmenu = xpkcli.helpmenu;
@@ -75,4 +77,20 @@ pub const misc = struct {
 pub const fs = struct {
     pub const createdir = fsutil.createdir;
     pub const rename = fsutil.rename;
+};
+
+pub const gc = struct {
+    pub const run = garbage.run;
+};
+
+pub const stratum = struct {
+    pub const seal = stratumforeal.seal_stratum;
+    pub const revert = stratumforeal.revert_stratum;
+    pub const history = stratumforeal.history;
+    pub const Action = stratumforeal.Action;
+};
+
+pub const rollback = struct {
+    pub const pkg = rollbackforeal.rollback_pkg;
+    pub const system = rollbackforeal.rollback_sys;
 };

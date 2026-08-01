@@ -10,7 +10,7 @@ pub const Config = types.Config;
 
 pub var current: Config = .{};
 
-// reads globals.conf and parses it, or returns Config{} defaults if it's missing.
+// reads globals.conf and parses it, or returns Config{} defaults if it's missing. we should autocreate it anyways or encourage users to do so tho
 pub fn load(io: std.Io, allocator: std.mem.Allocator) !Config {
     const bytes = std.Io.Dir.cwd().readFileAlloc(io, globals.conf, allocator, .unlimited) catch |err| switch (err) {
         error.FileNotFound => {

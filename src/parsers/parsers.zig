@@ -107,7 +107,7 @@ pub fn parse_r(allocator: std.mem.Allocator, text: []const u8) ![]types.Repo {
             true;
 
         try repos.append(allocator, .{
-            .name = name,
+            .name = try allocator.dupe(u8, name), // fix for shitty problem i had w my gc
             .url = url,
             .priority = priority,
             .enabled = enabled,

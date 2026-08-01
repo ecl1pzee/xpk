@@ -20,3 +20,9 @@ pub const buildusr = "xpk";
 pub const stage = tmp ++ "/stage"; // destdir, package installs go in here
 pub const dbfile = db ++ "/db"; // like the index files, this is in a binary format simmilar to that of 
 pub const objects = base ++ "/objects";
+
+// generations and filesystem snapshots for packages
+pub const strata = base ++ "/strata";
+//active shit
+pub const current = base ++ "/current";
+pub const stratums = base ++ "/stratums";

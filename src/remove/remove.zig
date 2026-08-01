@@ -3,10 +3,10 @@
 const std = @import("std");
 const globals = @import("../globals.zig");
 const db = @import("../db/db.zig");
-const objects = @import("../db/objects.zig");
+const strata = @import("../db/strata.zig");
 const utils = @import("../utils/utils.zig");
 const log = @import("../utils/log.zig");
-
+const stratum = @import("../stratum/stratum.zig");
 pub const Removeerror = error{notinstalled};
 
 const Owner = struct {
@@ -38,7 +38,7 @@ fn find_owner(io: std.Io, allocator: std.mem.Allocator, repos: []const utils.par
 }
 
 // missing symlinks are warned
-fn unlink_paths(io: std.Io, allocator: std.mem.Allocator, entries: []const objects.Treeentry) !void {
+fn unlink_paths(io: std.Io, allocator: std.mem.Allocator, entries: []const strata.Treeentry) !void {
     for (entries) |e| {
         const linkpath = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ globals.base, e.crel });
         defer allocator.free(linkpath);
@@ -52,6 +52,40 @@ fn unlink_paths(io: std.Io, allocator: std.mem.Allocator, entries: []const objec
 
         log.debug2("unlinked {s}\n", .{linkpath});
     }
+}
+
+// unlinks current, pretty much removal, but also needs to unlink another 
+fn unlink_current(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8) !void {
+    const linkpath = try strata.current_path(allocator, reponame, pkgname);
+    defer allocator.free(linkpath);
+
+    std.Io.Dir.deleteFileAbsolute(io, linkpath) catch |err| switch (err) {
+        error.FileNotFound => {
+            log.warn("{s} was already missing, skipping\n", .{linkpath});
+        },
+        else => return err,
+    };
+
+    log.debug2("unlinked {s}\n", .{linkpath});
+}
+
+// deletes ever layer-(number)
+fn remove_stratadirs(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8) !void {
+    const pkgdir = try std.fs.path.join(allocator, &.{ globals.strata, reponame, pkgname });
+    defer allocator.free(pkgdir);
+
+    var parent = std.Io.Dir.openDirAbsolute(io, std.fs.path.dirname(pkgdir) orelse return, .{}) catch |err| switch (err) {
+        error.FileNotFound => return,
+        else => return err,
+    };
+    defer parent.close(io);
+
+    parent.deleteTree(io, pkgname) catch |err| {
+        log.warn("failed removing strata dir for {s}/{s}: {s}\n", .{ reponame, pkgname, @errorName(err) });
+        return err;
+    };
+
+    log.debug1("removed strata directory for {s}/{s}\n", .{ reponame, pkgname });
 }
 
 // the actual remove operation
@@ -71,13 +105,22 @@ pub fn remove(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u8) !vo
 
     log.debug1("{s} is owned by repo '{s}'\n", .{ pkgname, owner.repo.name });
 
-    var loaded = try objects.load_tree(io, allocator, owner.entry.objhash);
+    var loaded = try strata.load_tree(io, allocator, owner.entry.objhash);
     defer loaded.deinit(allocator);
 
-    log.info("unlinking {d} paths\n", .{loaded.entries.len});
+    log.info("unlinking {d} merged paths\n", .{loaded.entries.len});
     try unlink_paths(io, allocator, loaded.entries);
 
+    log.info("unlinking current generation\n", .{});
+    try unlink_current(io, allocator, owner.repo.name, pkgname);
+
+    log.info("removing strata generations\n", .{});
+    try remove_stratadirs(io, allocator, owner.repo.name, pkgname);
+
     try db.remove_i(io, allocator, owner.repo.name, pkgname);
+
+    log.debug2("sealing stratum\n", .{});
+    try stratum.seal_stratum(io, allocator, pkgname, .remove);
 
     log.success("removed {s}\n", .{pkgname});
 }

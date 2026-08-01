@@ -8,6 +8,8 @@ const tree = @import("types/tree.zig");
 
 pub const Treeentry = tree.Treeentry;
 
+pub const treehashm = ".xpk-treehash";
+
 fn createdir(io: std.Io, path: []const u8) !void {
     return utils.fs.createdir(io, path);
 }
@@ -37,7 +39,6 @@ pub fn tree_path(allocator: std.mem.Allocator, hash: [32]u8) ![]u8 {
     return splitpath(allocator, root, hash);
 }
 
-// hashes file, simple as shit bro
 pub fn hash_file(io: std.Io, path: []const u8) ![32]u8 {
     const file = try std.Io.Dir.openFileAbsolute(io, path, .{ .mode = .read_only });
     defer file.close(io);
@@ -60,7 +61,6 @@ pub fn hash_file(io: std.Io, path: []const u8) ![32]u8 {
     return digest;
 }
 
-// writes bytes to dest automatically, atomically so we dont lose shit
 fn write_atomic(io: std.Io, allocator: std.mem.Allocator, destpath: []const u8, srcfile: std.Io.File, mode: std.posix.mode_t) !void {
     if (std.fs.path.dirname(destpath)) |parent| {
         std.Io.Dir.cwd().createDirPath(io, parent) catch |err| switch (err) {
@@ -68,11 +68,9 @@ fn write_atomic(io: std.Io, allocator: std.mem.Allocator, destpath: []const u8, 
             else => return err,
         };
     }
-    // the suffix is mostly for decor
     const tmppath = try std.fmt.allocPrint(allocator, "{s}.tmp-{d}", .{ destpath, std.Io.Timestamp.now(io, .real).toSeconds() });
     defer allocator.free(tmppath);
 
-    
     {
         const dst = try std.Io.Dir.createFileAbsolute(io, tmppath, .{ .truncate = true });
         defer dst.close(io);
@@ -93,11 +91,9 @@ fn write_atomic(io: std.Io, allocator: std.mem.Allocator, destpath: []const u8, 
         }
         try writer.flush();
 
-        // set mode BEFORE rename, so the file never exists at a discoverable path,  
         try dst.setPermissions(io, std.Io.File.Permissions.fromMode(mode));
     }
-
-    // renaming and cross device handling in future for linux
+    // i would just use rename, but ours requires mode so i just copy paste in contents and add mode
     std.Io.Dir.renameAbsolute(tmppath, destpath, io) catch |err| switch (err) {
         error.CrossDevice => {
             const src = try std.Io.Dir.openFileAbsolute(io, tmppath, .{ .mode = .read_only });
@@ -122,8 +118,8 @@ fn write_atomic(io: std.Io, allocator: std.mem.Allocator, destpath: []const u8, 
         else => return err,
     };
 }
-// stores content hash
-pub fn store_content(io: std.Io,allocator: std.mem.Allocator,srcpath: []const u8, mode: std.posix.mode_t) ![32]u8 {
+
+pub fn store_content(io: std.Io, allocator: std.mem.Allocator, srcpath: []const u8, mode: std.posix.mode_t) ![32]u8 {
     const hash = try hash_file(io, srcpath);
 
     const dest = try content_path(allocator, hash);
@@ -156,7 +152,7 @@ pub fn store_content(io: std.Io,allocator: std.mem.Allocator,srcpath: []const u8
     try write_atomic(io, allocator, dest, src, mode);
     return hash;
 }
-// actually commits the tree
+
 pub fn commit_tree(io: std.Io, allocator: std.mem.Allocator, entries: []Treeentry) ![32]u8 {
     tree.sort_entries(entries);
 
@@ -190,7 +186,7 @@ pub fn commit_tree(io: std.Io, allocator: std.mem.Allocator, entries: []Treeentr
 
     return hash;
 }
-// loadedtree is just when we LOAD the tree rightttt surprise
+
 pub const Loadedtree = struct {
     bytes: []const u8,
     entries: []Treeentry,
@@ -201,7 +197,6 @@ pub const Loadedtree = struct {
     }
 };
 
-// loads tree with entries , needs to be defered 
 pub fn load_tree(io: std.Io, allocator: std.mem.Allocator, hash: [32]u8) !Loadedtree {
     const path = try tree_path(allocator, hash);
     defer allocator.free(path);
@@ -213,8 +208,105 @@ pub fn load_tree(io: std.Io, allocator: std.mem.Allocator, hash: [32]u8) !Loaded
 
     return .{ .bytes = bytes, .entries = entries };
 }
-// links /opt/xpk/bin/(binary) to /opt/xpk/objects/(a4 <- first 2 letters, so each directory can store roughly 3096 binaries)/(rest of the 30 bytes of the hash) and so on, its pretty much identical to what OStree does under the bottom
-pub fn link_tree(io: std.Io, allocator: std.mem.Allocator, entries: []const Treeentry) !void {
+
+pub fn generation_path(allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, generation: u32) ![]u8 {
+    var genbuf: [10]u8 = undefined;
+    const genstr = try std.fmt.bufPrint(&genbuf, "layer-{d}", .{generation});
+    return std.fs.path.join(allocator, &.{ globals.strata, reponame, pkgname, genstr });
+}
+
+pub fn current_path(allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8) ![]u8 {
+    return std.fs.path.join(allocator, &.{ globals.current, reponame, pkgname });
+}
+
+fn write_treehashm(io: std.Io, allocator: std.mem.Allocator, gendir: []const u8, hash: [32]u8) !void {
+    const markerpath = try std.fs.path.join(allocator, &.{ gendir, treehashm });
+    defer allocator.free(markerpath);
+
+    const hex = std.fmt.bytesToHex(hash, .lower);
+
+    const file = try std.Io.Dir.createFileAbsolute(io, markerpath, .{ .truncate = true });
+    defer file.close(io);
+
+    var writerbuf: [80]u8 = undefined;
+    var fwriter = file.writer(io, &writerbuf);
+    try fwriter.interface.writeAll(&hex);
+    try fwriter.interface.flush();
+}
+
+pub fn materialize_generation(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, generation: u32, entries: []const Treeentry) ![]u8 {
+    const gendir = try generation_path(allocator, reponame, pkgname, generation);
+    errdefer allocator.free(gendir);
+
+    try createdir(io, gendir);
+
+    for (entries) |e| {
+        const target = try content_path(allocator, e.hash);
+        defer allocator.free(target);
+
+        const linkpath = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ gendir, e.crel });
+        defer allocator.free(linkpath);
+
+        if (std.fs.path.dirname(linkpath)) |parent| {
+            std.Io.Dir.cwd().createDirPath(io, parent) catch |err| switch (err) {
+                error.PathAlreadyExists => {},
+                else => return err,
+            };
+        }
+
+        try std.Io.Dir.symLinkAbsolute(io, target, linkpath, .{});
+
+        log.debug2("materialized {s} -> {s}\n", .{ linkpath, target });
+    }
+
+    return gendir;
+}
+
+
+pub fn materialize_genh(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, generation: u32, treehash: [32]u8, entries: []const Treeentry) ![]u8 {
+    const gendir = try materialize_generation(io, allocator, reponame, pkgname, generation, entries); // gender 
+    errdefer allocator.free(gendir);
+
+    try write_treehashm(io, allocator, gendir, treehash);
+
+    return gendir;
+}
+
+pub fn activate_generation(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, gendir: []const u8) !void {
+    const currentdir = try std.fs.path.join(allocator, &.{ globals.current, reponame });
+    defer allocator.free(currentdir);
+    try createdir(io, currentdir);
+
+    const linkpath = try current_path(allocator, reponame, pkgname);
+    defer allocator.free(linkpath);
+
+    const tmppath = try std.fmt.allocPrint(allocator, "{s}.tmp-{d}", .{ linkpath, std.Io.Timestamp.now(io, .real).toSeconds() });
+    defer allocator.free(tmppath);
+
+    std.Io.Dir.deleteFileAbsolute(io, tmppath) catch |err| switch (err) {
+        error.FileNotFound => {},
+        else => return err,
+    };
+
+    try std.Io.Dir.symLinkAbsolute(io, gendir, tmppath, .{});
+
+    std.Io.Dir.renameAbsolute(tmppath, linkpath, io) catch |err| switch (err) {
+        error.CrossDevice => {
+            std.Io.Dir.deleteFileAbsolute(io, linkpath) catch |derr| switch (derr) {
+                error.FileNotFound => {},
+                else => return derr,
+            };
+            try std.Io.Dir.symLinkAbsolute(io, gendir, linkpath, .{});
+            std.Io.Dir.deleteFileAbsolute(io, tmppath) catch {};
+        },
+        else => return err,
+    };
+
+    log.debug1("activated {s}/{s} -> {s}\n", .{ reponame, pkgname, gendir });
+}
+
+
+pub fn merge_tree(io: std.Io, allocator: std.mem.Allocator, entries: []const Treeentry) !void {
     for (entries) |e| {
         const target = try content_path(allocator, e.hash);
         defer allocator.free(target);
@@ -239,7 +331,7 @@ pub fn link_tree(io: std.Io, allocator: std.mem.Allocator, entries: []const Tree
         log.debug2("linked {s} -> {s}\n", .{ linkpath, target });
     }
 }
-// deletes a tree absolute path, helper cuz i use it like thrice
+
 fn delete_tabs(io: std.Io, abspath: []const u8) !void {
     const parent = std.fs.path.dirname(abspath) orelse return error.badpath;
     const base = std.fs.path.basename(abspath);
@@ -249,7 +341,11 @@ fn delete_tabs(io: std.Io, abspath: []const u8) !void {
 
     try dir.deleteTree(io, base);
 }
-// in a function so if cleanup_stage fails the whole build doesnt fail, only function returns negative, but i could've actually just catch (err)
+
+pub fn remove_generation(io: std.Io, gendir: []const u8) !void {
+    try delete_tabs(io, gendir);
+}
+
 pub fn cleanup_stage(io: std.Io, destdir: []const u8) !void {
     try delete_tabs(io, destdir);
 }

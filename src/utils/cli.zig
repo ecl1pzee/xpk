@@ -95,11 +95,11 @@ pub fn package_confirm(io: std.Io, package: [:0]const u8) !void {
     }
 }
 
-// yeah. it is v0.3, because v1 would be a complete 'package manager' with high support, a v3 would be 2 revamps and great ones of it, basically a version change is an extremely large event,
+// yeah. it is v0.3.5, because v1 would be a complete 'package manager' with high support, a v3 would be 2 revamps and great ones of it, basically a version change is an extremely large event,
 // also doesnt use any of the log shittings because they look weird with \\ spacing
 pub fn version() void {
     print(
-        \\version 0.3, brought to you by sundowner and firewalld, revamp of our beautiful: neo
+        \\version 0.3.5, brought to you by sundowner and firewalld, revamp of our beautiful: neo
         \\further development at https://github.com/ecl1pzee/xpk
         \\
     ,.{});
