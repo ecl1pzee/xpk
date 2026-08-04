@@ -8,11 +8,12 @@ const utils = @import("../utils/utils.zig");
 const config = @import("../config.zig");
 const stratum = @import("../stratum/stratum.zig");
 
-
+// wrapper
 fn createdir(io: std.Io, path: []const u8) !void {
     return utils.fs.createdir(io, path);
 }
 
+// strips an entire tree, will make optional at some point
 fn strip_tree(io: std.Io, allocator: std.mem.Allocator, destdir: []const u8, paths: []const []const u8) !void {
     for (paths) |rel| {
         const fullpath = try std.fs.path.join(allocator, &.{ destdir, rel });
@@ -27,7 +28,7 @@ fn strip_tree(io: std.Io, allocator: std.mem.Allocator, destdir: []const u8, pat
         _ = child.wait(io) catch {};
     }
 }
-
+// just changes destdir perms
 fn destdir_chown(io: std.Io, path: []const u8) !void {
     log.debug1("changing ownership of staging directory: {s}\n", .{path});
 
@@ -51,7 +52,7 @@ fn destdir_chown(io: std.Io, path: []const u8) !void {
         },
     }
 }
-
+// stages, need sto know destdir and buildysy
 pub fn stage_i(io: std.Io, allocator: std.mem.Allocator, sourced: []const u8, destdir: []const u8, buildsys: []const u8) !void {
     log.trace("staging package install using {s}\n", .{buildsys});
     try createdir(io, destdir);
@@ -74,7 +75,7 @@ pub fn stage_i(io: std.Io, allocator: std.mem.Allocator, sourced: []const u8, de
     try runner.run_step(io, allocator, argv.items, sourced);
     log.debug2("package staged successfuly\n", .{});
 }
-
+// walks and symlinks shit
 pub fn walk_s(io: std.Io, allocator: std.mem.Allocator, destdir: []const u8) ![][]const u8 {
     log.trace("walking staging directory: {s}\n", .{destdir});
     var paths: std.ArrayList([]const u8) = .empty;
@@ -130,7 +131,7 @@ fn build_treeentries(io: std.Io, allocator: std.mem.Allocator, destdir: []const 
 
     return entries;
 }
-
+// actually installs everything
 pub fn install(io: std.Io, allocator: std.mem.Allocator, sourced: []const u8, reponame: []const u8, pkgname: []const u8, category: []const u8, version: []const u8, xhash: [32]u8, buildsys: []const u8) !void {
     log.trace("install stage\n", .{});
 

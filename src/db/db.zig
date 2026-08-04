@@ -96,7 +96,7 @@ pub fn record_i(io: std.Io, allocator: std.mem.Allocator, entry: Dbentry) !void 
 }
 
 // removes ALL generations 
-// full removal, not a single-generation prune, single gens are gonna be done w garbage collecter
+// full removal, not a single gen prune, single gens are gonna be done w garbage collecter
 pub fn remove_i(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, name: []const u8) !void {
     const existing = try read_w(io, allocator, reponame);
     defer allocator.free(existing);

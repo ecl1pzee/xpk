@@ -1,3 +1,4 @@
+//! log stuff
 const std = @import("std");
 
 pub const print = std.debug.print;
@@ -20,7 +21,7 @@ inline fn enabled(required: Level) bool {
     return @intFromEnum(level) >= @intFromEnum(required);
 }
 
-// wrapp prefixes,
+// wrapp prefixes
 const reset = "\x1b[0m";
 
 inline fn cprefix(comptime code: []const u8, comptime prefix: []const u8) []const u8 {

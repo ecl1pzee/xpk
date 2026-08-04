@@ -7,14 +7,14 @@ const log = @import("../utils/log.zig");
 const config = @import("../config.zig");
 // forgot to say, first autohashmap usage!!!
 const Hashset = std.AutoHashMap([32]u8, void);
-
+// reads repos
 fn read_repos(io: std.Io, allocator: std.mem.Allocator) ![]utils.parser.Repo {
     const reposbytes = try std.Io.Dir.cwd().readFileAlloc(io, globals.reposconf, allocator, .unlimited);
     defer allocator.free(reposbytes);
     return utils.parser.parse_r(allocator, reposbytes);
 }
-
-fn current_gen_of(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8) !?u32 {
+// gets the current generation of a package
+fn current_genof(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8) !?u32 {
     const linkpath = try strata.current_path(allocator, reponame, pkgname);
     defer allocator.free(linkpath);
 
@@ -30,7 +30,7 @@ fn current_gen_of(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8
 
     return std.fmt.parseInt(u32, base, 10) catch null;
 }
-
+// list disk ongens
 fn list_diskong(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8) ![]u32 {
     const pkgdir = try std.fs.path.join(allocator, &.{ globals.strata, reponame, pkgname });
     defer allocator.free(pkgdir);
@@ -96,7 +96,7 @@ fn prune_pkg(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkg
 
     if (ondiskgens.len == 0) return 0;
 
-    const activegen = try current_gen_of(io, allocator, reponame, pkgname);
+    const activegen = try current_genof(io, allocator, reponame, pkgname);
 
     var removedcount: usize = 0;
     var keptcount: usize = 0;
@@ -128,7 +128,7 @@ fn prune_pkg(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkg
     return removedcount;
 }
 
-
+// recounciles world after gc
 fn reconcile_world(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8) !void {
     const entries = try db.read_w(io, allocator, reponame);
     defer allocator.free(entries);
@@ -160,7 +160,7 @@ fn reconcile_world(io: std.Io, allocator: std.mem.Allocator, reponame: []const u
     try db.write_w(io, allocator, reponame, kept.items);
 }
 
-
+// collects live generations
 fn collect_live(io: std.Io, allocator: std.mem.Allocator, repos: []const utils.parser.Repo, livetrees: *Hashset, livecontent: *Hashset) !void {
     for (repos) |repo| {
         if (repo.name.len == 0) continue;
@@ -188,7 +188,7 @@ fn collect_live(io: std.Io, allocator: std.mem.Allocator, repos: []const utils.p
     }
 }
 
-
+// marks the live generations
 fn mark_genlive(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, gen: u32, livetrees: *Hashset, livecontent: *Hashset) !void {
     const gendir = try strata.generation_path(allocator, reponame, pkgname, gen);
     defer allocator.free(gendir);
@@ -245,7 +245,7 @@ fn mark_genlive(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, 
         try livecontent.put(hash, {});
     }
 }
-
+// sweeps directories
 fn sweep_dir(io: std.Io, allocator: std.mem.Allocator, root: []const u8, live: *const Hashset) !usize {
     var removedcount: usize = 0;
 
@@ -315,7 +315,7 @@ fn sweep_dir(io: std.Io, allocator: std.mem.Allocator, root: []const u8, live: *
 
     return removedcount;
 }
-
+// actually runs everything
 pub fn run(io: std.Io, allocator: std.mem.Allocator, keep: u32) !void {
     log.info("starting garbage collection, keeping {d} generation(s) per package\n", .{keep});
 
