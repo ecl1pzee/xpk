@@ -76,7 +76,7 @@ Think of it as, a very small antivirus and threat prevention system
 
 If a newly built binary performs operations outside its declared policy or significantly differs (and by significantly, i mean a tool like ls from coreutils suddenly using internet) from previously trusted versions, XPK will refuse installation.
 
-The user will receive a detailed security report explaining why the package was rejected, along with information for contacting the repository maintainers to report a potentially compromised package.
+The user will receive a detailed security report explaining why the package was rejected, along with information for contacting the repository maintainers to report a potentially compromised package, or a package that simply violates policies.
 
 This layer is intended to detect malicious behavior even when cryptographic signatures and hashes remain valid for example, if an attacker has compromised an official repository or maintainer account, and had implemented a malicious build.
 
