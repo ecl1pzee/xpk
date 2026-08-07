@@ -5,7 +5,7 @@ The XPK package manager
 ![Status](https://img.shields.io/badge/status-development-blue)
 ![GitHub License](https://img.shields.io/github/license/fischblob-lol/xpk) 
 
-no discord guys i dont like people
+well fuck you dude
 
 XPK is a source, and binary based package manager
 that aims to be secure, powerful and user friendly, while also being highly debuggable!
