@@ -164,10 +164,10 @@ aurelius (xpk maintainer)
     Fingerprint: 7194 59C4 0E06 BCD8 7785 528F 48DC 1015 5AE4 87B5
 
     Fetch via:
-    gpg --keyserver keys.openpgp.org --recv-keys 719459C40E06BCD87785528F48DC10155AE487B5
+    gpg --keyserver keys.openpgp.org --recv-keys 79E772B20F99B1521BBB49C65BF74E3ED8868135
 
     Or view directly:
-    https://keys.openpgp.org/search?q=719459C40E06BCD87785528F48DC10155AE487B5
+    https://keys.openpgp.org/search?q=79E772B20F99B1521BBB49C65BF74E3ED8868135
 
 eclipse_dev (xpk maintainer)
 --------------------------------
