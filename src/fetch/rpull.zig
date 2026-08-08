@@ -23,13 +23,13 @@ fn rename(io: std.Io, old: []const u8, new: []const u8) !void {
 pub fn init_repos(io: std.Io) !void {
     const contents =
         \\[core]
-        \\url = "https://github.com/fischblob-lol/xpk-c"
+        \\url = "https://github.com/ecl1pzee/xpk-c"
         \\priority = 100
         \\enabled = true
         \\# hello from sundowner (expie)
         \\
     ;
-    
+
     log.info("first run of xpk may be quite slow due to initalization!\n", .{});
 
     if (std.Io.Dir.openFileAbsolute(io, globals.reposconf, .{ .mode = .read_only })) |file| {
@@ -41,12 +41,12 @@ pub fn init_repos(io: std.Io) !void {
     defer file.close(io);
 
     var writerbuf: [64 * 1024]u8 = undefined;
-    
+
     var fwriter = file.writer(io, &writerbuf);
     const writer = &fwriter.interface;
-    
+
     try writer.writeAll(contents);
-    try writer.flush(); 
+    try writer.flush();
 }
 
 // saves locally, for the repo name inscribed in /opt/xpk/repos/repos.conf (parser work)
@@ -58,7 +58,6 @@ fn sync_repo(io: std.Io, allocator: std.mem.Allocator, repo: utils.parser.Repo) 
 
     try createdir(io, repopath);
 
-    
     const indexurl = try std.fmt.allocPrint(allocator, "{s}/index", .{repo.url});
     const keyringurl = try std.fmt.allocPrint(allocator, "{s}/trust/keyring", .{repo.url});
     defer allocator.free(indexurl);
@@ -127,8 +126,7 @@ pub fn pull_repo(io: std.Io, allocator: std.mem.Allocator) !void {
 
     const repos = try utils.parser.parse_r(allocator, reposbytes);
     defer allocator.free(repos);
-    
-    
+
     if (repos.len == 0) {
         log.info("no repositories configured, please configure a repo\n", .{});
         return;
@@ -149,7 +147,7 @@ pub fn pull_repo(io: std.Io, allocator: std.mem.Allocator) !void {
         try names.append(allocator, repo.name);
     }
 
-    var failures: usize = 0; 
+    var failures: usize = 0;
 
     for (futures.items, 0..) |*futs, i| {
         futs.await(io) catch |err| {
@@ -165,4 +163,3 @@ pub fn pull_repo(io: std.Io, allocator: std.mem.Allocator) !void {
         log.success("all repositories up to date!\n", .{});
     }
 }
-
