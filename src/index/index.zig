@@ -98,8 +98,7 @@ pub fn wrap_signed(allocator: std.mem.Allocator, indexbin: []const u8, sigs: []c
 pub fn index_repo(io: std.Io, allocator: std.mem.Allocator, repopath: []const u8, kp: Ed25519.KeyPair) !void {
     var entries: std.ArrayList(types.Idxentry) = .empty;
     defer entries.deinit(allocator);
-
-    const head = try get_head(io, allocator, repopath);
+    // fuck
     
     var dir = try std.Io.Dir.openDirAbsolute(io, repopath, .{ .iterate = true });
     defer dir.close(io);
@@ -159,7 +158,8 @@ pub fn index_repo(io: std.Io, allocator: std.mem.Allocator, repopath: []const u8
     }
 
     // here that happens, we encode the blob 
-    log.trace("encoding binary blob\n", .{});
+    log.trace("encoding binary blob and getting head\n", .{});
+    const head = try get_head(io, allocator, repopath);
     const indexbin = try encode_idx(allocator, entries.items, head); 
     defer allocator.free(indexbin);
 

@@ -46,7 +46,7 @@ fn fetchraw(allocator: std.mem.Allocator, io: std.Io, url: []const u8) ![]u8 {
     var decomp: std.http.Decompress = undefined;
     const reader = response.readerDecompressing(&transferbuf, &decomp, &decompbuf);
 
-    return try reader.allocRemaining(allocator, .limited(8192));
+    return try reader.allocRemaining(allocator, .limited(64 * 1024));
 }
 
 fn format_head(allocator: std.mem.Allocator, head: [32]u8) ![]u8 {
