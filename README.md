@@ -161,7 +161,7 @@ XPK uses the 2-Clause BSD License. More info about it at: https://opensource.org
 
 aurelius (xpk maintainer)
 --------------------------
-    Fingerprint: 7194 59C4 0E06 BCD8 7785 528F 48DC 1015 5AE4 87B5
+    Fingerprint: 79E772B20F99B1521BBB49C65BF74E3ED8868135 (im too lazy to type this shit out rn)
 
     Fetch via:
     gpg --keyserver keys.openpgp.org --recv-keys 79E772B20F99B1521BBB49C65BF74E3ED8868135
