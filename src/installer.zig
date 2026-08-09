@@ -49,7 +49,7 @@ pub fn get_package(io: std.Io, allocator: std.mem.Allocator, package: [:0]const 
     
     try install(io,allocator,out,pkgurl.repo,xbuild.info.name,pkgurl.category,xbuild.info.version,pkgurl.hash,xbuild.build.build_sys);
     
-    log.debug1("claning up /tmp/xpk artifacts\n", .{});
+    log.debug1("cleaning up /tmp/xpk artifacts\n", .{});
     
     {
         var parent = try std.Io.Dir.openDirAbsolute(io, "/tmp", .{});
@@ -58,6 +58,14 @@ pub fn get_package(io: std.Io, allocator: std.mem.Allocator, package: [:0]const 
             log.err("error, was not able to delete /tmp artifacts", .{});
             return err;
         };
+    }
+
+    if (xbuild.info.message) |msg| {
+        if (msg.len > 0) {
+            log.print("package ->{s}<{s}> has a message for you!\n", .{xbuild.info.name, xbuild.info.version}); 
+            log.print("========================================", .{}); 
+            log.print("{s}\n", .{msg}); // does not support newlines rn, and i could do some tweaks like "indexof/contains" to parse for newlines and print them, but im lazy rn, so ill do that later
+        }
     }
 
     log.success("installed {s} {s}\n", .{xbuild.info.name, xbuild.info.version});

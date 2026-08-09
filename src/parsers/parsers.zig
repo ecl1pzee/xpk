@@ -145,6 +145,7 @@ pub fn parse_a(allocator: std.mem.Allocator, text: []const u8) !types.Xbuild {
     result.info.desc = try doc.get_str("info", "desc");
     result.info.license = try doc.get_str("info", "license");
     result.info.deps = try doc.get_strarr("info", "deps", allocator);
+    result.info.message = try doc.get_str("info", "message") orelse "";
 
     // [pkg]
     result.pkg.src_url = try doc.get_str("pkg", "src-url") orelse "";

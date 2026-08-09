@@ -9,6 +9,7 @@ pub const Info = struct {
     desc: ?[]const u8 = null,
     license: ?[]const u8 = null,
     deps: ?[]const []const u8 = null, // was ?[][]const u8
+    message: ?[]const u8 = "",
 };
 
 pub const Pkg = struct {

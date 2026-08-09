@@ -55,7 +55,7 @@ Packages are built inside a fully isolated sandbox.
 
 The build environment has no unintended access to the host system outside of the temporary directory, preventing build scripts from modifying user files or interacting with the operating system outside the sandbox. In addition, builds execute under a dedicated unprivileged user, providing another layer of containment should a malicious build script attempt to escape, and later on will report these incidents.
 
-Binary Behavior Verification *(im doing this next)* 
+Binary Behavior Verification *(NOT SOON)*
 =========================================
 
 After a package is built, XPK will analyze the resulting binaries using zre (currently under development)
@@ -161,7 +161,7 @@ XPK uses the 2-Clause BSD License. More info about it at: https://opensource.org
 
 aurelius (xpk maintainer)
 --------------------------
-    Fingerprint: 79E772B20F99B1521BBB49C65BF74E3ED8868135 (im too lazy to type this shit out rn)
+    Fingerprint: 79E7 72B2 0F99 B152 1BBB 49C6 5BF7 4E3E D886 8135 
 
     Fetch via:
     gpg --keyserver keys.openpgp.org --recv-keys 79E772B20F99B1521BBB49C65BF74E3ED8868135
