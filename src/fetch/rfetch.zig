@@ -12,7 +12,7 @@ const log = @import("../utils/log.zig");
 
 const print = std.debug.print;
 
-fn build_url(allocator: std.mem.Allocator, repourl: []const u8, headstr: []const u8,subpath: []const u8) ![]u8 {
+fn build_url(allocator: std.mem.Allocator, repourl: []const u8, headstr: []const u8, subpath: []const u8) ![]u8 {
     if (std.mem.indexOf(u8, repourl, "github") != null) {
         const branchstart = std.mem.lastIndexOfScalar(u8, repourl, '/') orelse {
             // no '/' found at all, malformed url, just fall through unpinned, and probably fail
@@ -20,10 +20,10 @@ fn build_url(allocator: std.mem.Allocator, repourl: []const u8, headstr: []const
         };
         const base = repourl[0..branchstart];
         return try std.fmt.allocPrint(allocator, "{s}/{s}/{s}", .{ base, headstr, subpath });
-    } 
+    }
 
     // add elsestatemnts for codeberg.org / raw.codeberg.org uses a different raw-url shape
-    
+
     // unknown host, so just return normally
     return try std.fmt.allocPrint(allocator, "{s}/{s}", .{ repourl, subpath });
 }
@@ -62,7 +62,7 @@ pub fn remote_fetch(io: std.Io, allocator: std.mem.Allocator, package: []const u
     defer allocator.free(reposbytes);
 
     const repos = try utils.parser.parse_r(allocator, reposbytes);
- 
+
     // we use invidial ones instead of 'foundrepo' because with foundrepo it fucks over after
     var foundreponame: ?[]u8 = null;
     var foundrepourl: ?[]u8 = null;
@@ -87,26 +87,23 @@ pub fn remote_fetch(io: std.Io, allocator: std.mem.Allocator, package: []const u
 
         // uses the parsed offset table and find_package to find the package
         if (types.find_package(indexbytes, parsed.offsets, parsed.entriesst, package)) |entry| {
-         
             foundreponame = try allocator.dupe(u8, repo.name);
             foundrepourl = try allocator.dupe(u8, repo.url);
 
-  
             foundpkg = entry;
             foundhead = parsed.head;
             break;
         }
     }
 
-    
-    const reponame = foundreponame orelse unreachable;
-    const repourl = foundrepourl orelse unreachable;
-
+    // fixed unreachable shit
     const pkg = foundpkg orelse {
         log.warn("package {s} doesn't exist in any enabled repo\n", .{package});
         std.process.exit(1); // errors that happen a lot are ugly, thats why std.process.exit is used to not let that happen
     };
 
+    const reponame = foundreponame orelse unreachable; // safe now
+    const repourl = foundrepourl orelse unreachable;
 
     log.trace("formatting urls\n", .{});
 
@@ -121,7 +118,6 @@ pub fn remote_fetch(io: std.Io, allocator: std.mem.Allocator, package: []const u
     const xbuildurl = try build_url(allocator, repourl, headstr, path);
     defer allocator.free(xbuildurl);
 
-    
     log.info("getting remote build files...\n", .{});
 
     //errordefers and added a hash getter, and hash formatter for index.bin
@@ -130,12 +126,11 @@ pub fn remote_fetch(io: std.Io, allocator: std.mem.Allocator, package: []const u
     // so our security is not only per repo it is per package, although hashes do not have a use for being individually signed, its much better to just sign the repo
     const avhash = try utils.security.get_hashb(xbuildbytes);
 
-    if (!std.mem.eql(u8,  &avhash, &pkg.xhash)) {
+    if (!std.mem.eql(u8, &avhash, &pkg.xhash)) {
         log.err("hash of package in index does not match the one that was downloaded\n", .{});
         return error.xbuildhashmismatch;
     }
 
-    // need more shit 
-    return types.Pkgurl{.allocator = allocator, .xbuild = xbuildbytes, .repo = reponame, .category = pkg.category, .hash = pkg.xhash};
-    
+    // need more shit
+    return types.Pkgurl{ .allocator = allocator, .xbuild = xbuildbytes, .repo = reponame, .category = pkg.category, .hash = pkg.xhash };
 }

@@ -1,3 +1,4 @@
+//! installs stuff professionally, and records it in the db, and merges it into globals.base
 const std = @import("std");
 const strata = @import("../db/strata.zig");
 const runner = @import("../build/run.zig");
@@ -182,8 +183,7 @@ pub fn install(io: std.Io, allocator: std.mem.Allocator, sourced: []const u8, re
     try strata.activate_generation(io, allocator, reponame, pkgname, gendir);
 
     log.debug2("merging into {s}\n", .{globals.base});
-    try strata.merge_tree(io, allocator, treeentries);
-
+    try strata.merge_tree(io, allocator, reponame, pkgname, treeentries);
        
 
     const timestamp = std.Io.Timestamp.now(io, .real);

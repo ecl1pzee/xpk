@@ -5,6 +5,7 @@ const globals = @import("../globals.zig");
 const log = @import("../utils/log.zig");
 const utils = @import("../utils/utils.zig");
 const tree = @import("types/tree.zig");
+const owners = @import("../db/types/owners.zig");
 
 pub const Treeentry = tree.Treeentry;
 
@@ -305,8 +306,61 @@ pub fn activate_generation(io: std.Io, allocator: std.mem.Allocator, reponame: [
     log.debug1("activated {s}/{s} -> {s}\n", .{ reponame, pkgname, gendir });
 }
 
+fn ownerspath(allocator: std.mem.Allocator) ![]u8 {
+    return std.fs.path.join(allocator, &.{ globals.db, "owners" });
+}
 
-pub fn merge_tree(io: std.Io, allocator: std.mem.Allocator, entries: []const Treeentry) !void {
+// reads the owners db, returns empty slice if it doesn't exist yet
+pub fn read_owners(io: std.Io, allocator: std.mem.Allocator) ![]owners.Ownerentry {
+    const path = try ownerspath(allocator);
+    defer allocator.free(path);
+
+    const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited) catch |err| switch (err) {
+        error.FileNotFound => return &.{},
+        else => return err,
+    };
+    defer allocator.free(bytes);
+
+    return owners.decode_owners(bytes, allocator);
+}
+
+pub fn write_owners(io: std.Io, allocator: std.mem.Allocator, entries: []const owners.Ownerentry) !void {
+    const path = try ownerspath(allocator);
+    defer allocator.free(path);
+
+    const encoded = try owners.encode_owners(allocator, entries);
+    defer allocator.free(encoded);
+
+    const file = try std.Io.Dir.createFileAbsolute(io, path, .{ .truncate = true });
+    defer file.close(io);
+
+    var writerbuf: [16 * 1024]u8 = undefined;
+    var fwriter = file.writer(io, &writerbuf);
+    try fwriter.interface.writeAll(encoded);
+    try fwriter.interface.flush();
+}
+
+pub const Mergeerror = error{pathownedbyanother};
+
+// check ownership before merging a tree into a repo, and update the owners db if successful
+// 
+pub fn merge_tree(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, entries: []const Treeentry) !void {
+    const existing = try read_owners(io, allocator);
+    defer allocator.free(existing);
+
+    var updated: std.ArrayList(owners.Ownerentry) = .empty;
+    defer updated.deinit(allocator);
+    try updated.appendSlice(allocator, existing);
+
+    for (entries) |e| {
+        if (owners.find_owner(existing, e.crel)) |owner| {
+            if (!std.mem.eql(u8, owner.reponame, reponame) or !std.mem.eql(u8, owner.pkgname, pkgname)) {
+                log.err("refusing merge: {s} is already owned by {s}/{s}, conflicts with {s}/{s}\n", .{ e.crel, owner.reponame, owner.pkgname, reponame, pkgname });
+                return Mergeerror.pathownedbyanother;
+            }
+        }
+    }
+
     for (entries) |e| {
         const target = try content_path(allocator, e.hash);
         defer allocator.free(target);
@@ -329,7 +383,33 @@ pub fn merge_tree(io: std.Io, allocator: std.mem.Allocator, entries: []const Tre
         try std.Io.Dir.symLinkAbsolute(io, target, linkpath, .{});
 
         log.debug2("linked {s} -> {s}\n", .{ linkpath, target });
+
+        if (owners.find_owner(updated.items, e.crel) == null) {
+            try updated.append(allocator, .{
+                .crel = e.crel,
+                .reponame = reponame,
+                .pkgname = pkgname,
+            });
+        }
     }
+
+    try write_owners(io, allocator, updated.items);
+}
+
+// removes a package's ownership records, called from remove.zig alongside unlink_paths
+pub fn release_ownership(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8) !void {
+    const existing = try read_owners(io, allocator);
+    defer allocator.free(existing);
+
+    var kept: std.ArrayList(owners.Ownerentry) = .empty;
+    defer kept.deinit(allocator);
+
+    for (existing) |e| {
+        if (std.mem.eql(u8, e.reponame, reponame) and std.mem.eql(u8, e.pkgname, pkgname)) continue;
+        try kept.append(allocator, e);
+    }
+
+    try write_owners(io, allocator, kept.items);
 }
 
 fn delete_tabs(io: std.Io, abspath: []const u8) !void {

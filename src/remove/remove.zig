@@ -111,6 +111,9 @@ pub fn remove(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u8) !vo
     log.info("unlinking {d} merged paths\n", .{loaded.entries.len});
     try unlink_paths(io, allocator, loaded.entries);
 
+    log.debug1("releasing ownership records\n", .{});
+    try strata.release_ownership(io, allocator, owner.repo.name, pkgname);
+
     log.info("unlinking current generation\n", .{});
     try unlink_current(io, allocator, owner.repo.name, pkgname);
 

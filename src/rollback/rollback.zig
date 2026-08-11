@@ -107,7 +107,7 @@ pub fn rollback_pkg(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u
     defer targettree.deinit(allocator);
 
     log.debug2("merging rolled back tree into {s}\n", .{globals.base});
-    try strata.merge_tree(io, allocator, targettree.entries);
+    try strata.merge_tree(io, allocator, owner.repo.name, pkgname, targettree.entries);
 
     try stratumf.seal_stratum(io, allocator, pkgname, .rollback);
 
@@ -172,7 +172,7 @@ pub fn rollback_sys(io: std.Io, allocator: std.mem.Allocator, targetnum: ?u32) !
             var loaded = try strata.load_tree(io, allocator, treehash);
             defer loaded.deinit(allocator);
 
-            try strata.merge_tree(io, allocator, loaded.entries);
+            try strata.merge_tree(io, allocator, repoentry.name, pkgentry.name, loaded.entries);
         }
     }
 

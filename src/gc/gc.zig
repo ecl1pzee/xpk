@@ -1,3 +1,4 @@
+//! the garbage collection system
 const std = @import("std");
 const globals = @import("../globals.zig");
 const db = @import("../db/db.zig");
@@ -89,7 +90,8 @@ fn list_ondiskpkgs(io: std.Io, allocator: std.mem.Allocator, reponame: []const u
 }
 
 
-//prune old gens
+// prune old gens
+// fixed logic
 fn prune_pkg(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, keep: u32) !usize {
     const ondiskgens = try list_diskong(io, allocator, reponame, pkgname);
     defer allocator.free(ondiskgens);
@@ -103,10 +105,17 @@ fn prune_pkg(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkg
 
     for (ondiskgens) |gen| {
         const isactive = activegen != null and gen == activegen.?;
-        const withinkeep = keptcount < keep;
 
-        if (isactive or withinkeep) {
-            if (!isactive or withinkeep) keptcount += 1;
+        if (isactive) {
+            // active generation is always kept, and it still consumes a keep slot
+            keptcount += 1;
+            log.debug2("keeping {s}/{s} generation {d} (active, symlinked)\n", .{ reponame, pkgname, gen });
+            continue;
+        }
+
+        if (keptcount < keep) {
+            keptcount += 1;
+            log.debug2("keeping {s}/{s} generation {d} (within keep window, {d}/{d})\n", .{ reponame, pkgname, gen, keptcount, keep });
             continue;
         }
 
