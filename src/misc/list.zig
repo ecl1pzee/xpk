@@ -76,7 +76,7 @@ pub fn list(io: std.Io, allocator: std.mem.Allocator) !void {
 }
 
 
-// searches installed packages, only matches against the currently active generation
+// searches INSTALLED packages, only matches against the currently active generation
 pub fn search(io: std.Io, allocator: std.mem.Allocator, query: []const u8) !void {
     log.trace("starting search query '{s}'\n", .{query});
 
@@ -187,7 +187,7 @@ pub fn info(io: std.Io, allocator: std.mem.Allocator, package: []const u8) !void
     };
 
     log.success("found installed package '{s}'\n", .{pkg.name});
-
+    // wow log.print
     log.print(
         \\name: {s}
         \\category: {s}

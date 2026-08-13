@@ -4,6 +4,9 @@
 //! so i keep this in the same binary for easy use, no point to start another repo.
 //! altough, i might actually make this into a xpk tool like xpk-sign, but that will happen later
 //! and may not happen at all
+//! needs a rework to where the keys actually, go.
+//! fuck i've looked at the std and cant find any env mapper
+//! shit
 const std = @import("std");
 const Ed25519 = std.crypto.sign.Ed25519;
 const globals = @import("../globals.zig");

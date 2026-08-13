@@ -137,6 +137,15 @@ pub fn download(io: std.Io, allocator: std.mem.Allocator, url: []const u8, nobar
     return outputpath;
 }
 
+// FUTURE ME
+// i found that std.progress exists
+// and i want to kms
+// like really bad
+// ill try it out tmrw, ill do some helper or someofashit
+// anyways, i might keep this design but if std.progress IS goated, ill switch over.
+// i found this out cuz i was fucking around in std and found that build.zig actually uses it, and the directory has so much shit
+
+
 // first time using mutex! kinda nervous....
 var mutex: std.Io.Mutex = .init;
 // jumps the cursor up from the reserved bottom line to this download's row and clears it

@@ -1,0 +1,6 @@
+so, architechture wise we are prettyyyy alright.
+problem is, there is alot of shit to fix up, and looking at it from the side: our model is good but with our specific model to make it usuable its harder
+its gonna take me what? 2 weeks to get this shit where i want if i work real hard.
+but big hitters is: gc not removing dependency referenced things, dependencies at all, how things interact w eachother and such, its a hard ecosystem
+
+oh and also i gotta add stratum managing and stratum garbage collection (when old packages dont point in old stratums they get cleaned up)

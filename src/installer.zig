@@ -7,6 +7,7 @@ const install = @import("install/install.zig").install;
 const log = @import("utils/log.zig");
 const config = @import("config.zig");
 
+// just the global installer function
 pub fn get_package(io: std.Io, allocator: std.mem.Allocator, package: [:0]const u8) !void {
     try tmp_chown(io, globals.tmp);
     var pkgurl = try utils.installer.remote_fetch(io, allocator, package);
@@ -60,6 +61,7 @@ pub fn get_package(io: std.Io, allocator: std.mem.Allocator, package: [:0]const 
         };
     }
 
+    // forgot to say, yeah i added this for australis he wanted it
     if (xbuild.info.message) |msg| {
         if (msg.len > 0) {
             log.print("package ->{s}<{s}> has a message for you!\n", .{xbuild.info.name, xbuild.info.version}); 

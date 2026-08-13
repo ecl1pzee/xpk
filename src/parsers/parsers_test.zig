@@ -4,6 +4,8 @@ const types = @import("types/types.zig");
 
 const parse_k = parsers.parse_k;
 
+// why do i even have these atp i have 49 automl tests- 
+
 test "parse_k parses a full keyring" {
     const allocator = std.testing.allocator;
 

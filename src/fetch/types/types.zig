@@ -1,6 +1,5 @@
 const std = @import("std");
 
-
 // added more options because we need our install shit to know alot
 pub const Pkgurl = struct {
     allocator: std.mem.Allocator,
@@ -15,6 +14,7 @@ pub const Pkgurl = struct {
     }
 };
 
+// imma push this to one file only later 
 // readded, because i put whatever i want to use in types/types.zig, and it doesnt contact with 'index' (atleast not yet) so im not putting it in utils
 pub const Idxentry = struct {
     xhash: [32]u8,

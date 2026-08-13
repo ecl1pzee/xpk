@@ -1,7 +1,9 @@
 //! will have outdated hashes such as blake added soon, for purpose of compatibility, although it will be highly encouraged to use sha256
 //! will also implement simple keys and trust here
 //! will also contain trusted commits, and yeah you guessed it just more stuff for hashing in this file specifically but in the directory much more
-
+//! lmaoo he did not add blake 
+//! probs gonna stay that way but we will add smthing eventually
+//! 
 const std = @import("std");
 // expected hash would be whatever you download
 pub fn get_hash(file: std.Io.File, io: std.Io, expected: []const u8) !bool {

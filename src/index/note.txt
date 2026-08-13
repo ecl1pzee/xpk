@@ -1,0 +1,4 @@
+future me rework indexxing security wise (its alright everywhere else)
+and possibly keyrings?
+idk
+good luck tho

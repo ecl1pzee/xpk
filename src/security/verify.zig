@@ -2,8 +2,10 @@ const std = @import("std");
 const Ed25519 = std.crypto.sign.Ed25519;
 const idxtypes = @import("../index/types/types.zig");
 const keyringtypes = @import("../parsers/types/types.zig");
-
+//verity error
 pub const Verifyerror = error{ notenoughsigs, badfingerprint };
+
+// anyways simple file it just verifies stuff, needs a signed idx and parsed keyring tho
 
 // shit sigs from unrecognized fingerprints just gets ignored, they don't help or hurt, requires a keyring struct from keyring.autm
 pub fn verify_s(signed: idxtypes.Signedidx, keyring: keyringtypes.Keyring) !void {

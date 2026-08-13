@@ -4,7 +4,8 @@
 //! thats it
 //! especially they will change when porting to linux
 //! real
-//! these are gonna probably dissapear soon, everything is gonna be in /opt/xpk/xo
+//! these are gonna probably dissapear soon, everything is gonna be in /opt/xpk
+//! 
 
 pub const base = "/opt/xpk";
 pub const db = base ++ "/db";
@@ -21,7 +22,9 @@ pub const stage = tmp ++ "/stage"; // destdir, package installs go in here
 pub const dbfile = db ++ "/db"; // like the index files, this is in a binary format simmilar to that of 
 pub const objects = base ++ "/objects";
 
-// generations and filesystem snapshots for packages
+// cool names down here but we may go into a more git naming convention (like objects above)
+
+// generations and filesystem snapshots fr packages
 pub const strata = base ++ "/strata";
 //active shit
 pub const current = base ++ "/current";

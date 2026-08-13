@@ -108,6 +108,7 @@ pub fn parse_r(allocator: std.mem.Allocator, text: []const u8) ![]types.Repo {
 
         try repos.append(allocator, .{
             .name = try allocator.dupe(u8, name), // fix for shitty problem i had w my gc
+            // also said problem probably causes a veery veryy small memory leak, and if we want to fix it we should free it everywhere. FUCK. ill add a fix later, if thats even the case
             .url = url,
             .priority = priority,
             .enabled = enabled,

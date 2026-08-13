@@ -1,5 +1,6 @@
-//! the idea is sort of taken from nix.
-//! but it goes along with our design VERY. VERY. well, so i want to use it
+//! big ass rework
+//! but in a nutshell, recursive trees,and a hash chain (well, it was there but greatly improved)
+//! its impossible to screw with the logs now, each new log verifies each old one 
 const std = @import("std");
 const globals = @import("../globals.zig");
 const log = @import("../utils/log.zig");
@@ -8,6 +9,7 @@ const tree = @import("types/tree.zig");
 const owners = @import("../db/types/owners.zig");
 
 pub const Treeentry = tree.Treeentry;
+pub const Kind = tree.Kind;
 
 pub const treehashm = ".xpk-treehash";
 
@@ -19,7 +21,7 @@ fn splitpath(allocator: std.mem.Allocator, roots: []const u8, hash: [32]u8) ![]u
     const hex = std.fmt.bytesToHex(hash, .lower);
     return std.fs.path.join(allocator, &.{ roots, hex[0..2], hex[2..] });
 }
-
+// ill keep these incase i wanna change, prob not i hope cuz it woulddd require a shit ton of work
 fn content_root(allocator: std.mem.Allocator) ![]u8 {
     return std.fs.path.join(allocator, &.{ globals.objects, "content" });
 }
@@ -39,7 +41,7 @@ pub fn tree_path(allocator: std.mem.Allocator, hash: [32]u8) ![]u8 {
     defer allocator.free(root);
     return splitpath(allocator, root, hash);
 }
-
+// hashes a file based on path not a handle to a file
 pub fn hash_file(io: std.Io, path: []const u8) ![32]u8 {
     const file = try std.Io.Dir.openFileAbsolute(io, path, .{ .mode = .read_only });
     defer file.close(io);
@@ -61,7 +63,7 @@ pub fn hash_file(io: std.Io, path: []const u8) ![32]u8 {
     hasher.final(&digest);
     return digest;
 }
-
+// writes atomically. nothing else.
 fn write_atomic(io: std.Io, allocator: std.mem.Allocator, destpath: []const u8, srcfile: std.Io.File, mode: std.posix.mode_t) !void {
     if (std.fs.path.dirname(destpath)) |parent| {
         std.Io.Dir.cwd().createDirPath(io, parent) catch |err| switch (err) {
@@ -94,7 +96,6 @@ fn write_atomic(io: std.Io, allocator: std.mem.Allocator, destpath: []const u8, 
 
         try dst.setPermissions(io, std.Io.File.Permissions.fromMode(mode));
     }
-    // i would just use rename, but ours requires mode so i just copy paste in contents and add mode
     std.Io.Dir.renameAbsolute(tmppath, destpath, io) catch |err| switch (err) {
         error.CrossDevice => {
             const src = try std.Io.Dir.openFileAbsolute(io, tmppath, .{ .mode = .read_only });
@@ -104,8 +105,10 @@ fn write_atomic(io: std.Io, allocator: std.mem.Allocator, destpath: []const u8, 
 
             var writerbuf: [64 * 1024]u8 = undefined;
             var fwriter = dst.writer(io, &writerbuf);
+
             var readerbuf: [64 * 1024]u8 = undefined;
             var freader = src.reader(io, &readerbuf);
+
             var buf: [64 * 1024]u8 = undefined;
             while (true) {
                 const n = try freader.interface.readSliceShort(&buf);
@@ -154,10 +157,10 @@ pub fn store_content(io: std.Io, allocator: std.mem.Allocator, srcpath: []const 
     return hash;
 }
 
-pub fn commit_tree(io: std.Io, allocator: std.mem.Allocator, entries: []Treeentry) ![32]u8 {
+fn write_treeobj(io: std.Io, allocator: std.mem.Allocator, entries: []Treeentry, dirmode: u32) ![32]u8 {
     tree.sort_entries(entries);
 
-    const blob = try tree.encode_tree(allocator, entries);
+    const blob = try tree.encode_tree(allocator, entries, dirmode);
     defer allocator.free(blob);
 
     const hash = tree.hash_tree(blob);
@@ -187,10 +190,110 @@ pub fn commit_tree(io: std.Io, allocator: std.mem.Allocator, entries: []Treeentr
 
     return hash;
 }
+// one staged file
+pub const Stagedfile = struct {
+    crel: []const u8,
+    hash: [32]u8,
+    mode: u32,
+};
+// these nodes are way easier to work w, but its not the point:
+// optimization is.
+// actually, its ironic because our last method was faster since it was less convoluted. 
+// but, its an architechtural change for later, since we want auditing we needed subtree skipping and avoiding rehashing per procedure
+// so long term it is better 
+const Dirnode = struct {
+    children: std.StringHashMap(*Dirnode), // recurisve, as i already said
+    files: std.ArrayList(Stagedfile),
+    mode: u32 = 0o755, // default 
+
+    fn init(allocator: std.mem.Allocator) Dirnode {
+        return .{.children = std.StringHashMap(*Dirnode).init(allocator),.files = .empty};
+    }
+
+    fn deinit(self: *Dirnode, allocator: std.mem.Allocator) void {
+        var it = self.children.valueIterator();
+        while (it.next()) |child| {
+            child.*.deinit(allocator);
+            allocator.destroy(child.*);
+        }
+        self.children.deinit();
+        self.files.deinit(allocator);
+    }
+};
+// creates child if doesn't exist, likewise gets if exists
+fn get_createchild(allocator: std.mem.Allocator, node: *Dirnode, name: []const u8) !*Dirnode {
+    if (node.children.get(name)) |existing| return existing;
+
+    const child = try allocator.create(Dirnode);
+    child.* = Dirnode.init(allocator);
+    try node.children.put(try allocator.dupe(u8, name), child);
+    return child;
+}
+// inserts a file
+fn insert_file(allocator: std.mem.Allocator, root: *Dirnode, crel: []const u8, hash: [32]u8, mode: u32) !void {
+    var it = std.mem.splitScalar(u8, crel, '/');
+    var node = root;
+
+    var parts: std.ArrayList([]const u8) = .empty;
+    defer parts.deinit(allocator);
+    while (it.next()) |part| try parts.append(allocator, part);
+
+    for (parts.items[0 .. parts.items.len - 1]) |dirname| {
+        node = try get_createchild(allocator, node, dirname);
+    }
+
+    try node.files.append(allocator, .{
+        .crel = parts.items[parts.items.len - 1],
+        .hash = hash,
+        .mode = mode,
+    });
+}
+
+// recursively builds and writes
+// then yeah, commits it
+fn commit_node(io: std.Io, allocator: std.mem.Allocator, node: *Dirnode) ![32]u8 {
+    var entries: std.ArrayList(Treeentry) = .empty;
+    defer entries.deinit(allocator);
+
+    for (node.files.items) |f| {
+        try entries.append(allocator, .{
+            .name = f.crel,
+            .hash = f.hash,
+            .mode = f.mode,
+            .kind = .file,
+        });
+    }
+
+    var childit = node.children.iterator();
+    while (childit.next()) |entry| {
+        const childhash = try commit_node(io, allocator, entry.value_ptr.*);
+        try entries.append(allocator, .{
+            .name = entry.key_ptr.*,
+            .hash = childhash,
+            .mode = entry.value_ptr.*.mode,
+            .kind = .dir,
+        });
+    }
+
+    return write_treeobj(io, allocator, entries.items, node.mode);
+}
+
+// builds the full recursive tree from a flat list of staged files, returns root hash
+pub fn commit_tree(io: std.Io, allocator: std.mem.Allocator, files: []const Stagedfile) ![32]u8 {
+    var root = Dirnode.init(allocator);
+    defer root.deinit(allocator);
+
+    for (files) |f| {
+        try insert_file(allocator, &root, f.crel, f.hash, f.mode);
+    }
+
+    return commit_node(io, allocator, &root);
+}
 
 pub const Loadedtree = struct {
     bytes: []const u8,
     entries: []Treeentry,
+    dirmode: u32,
 
     pub fn deinit(self: *Loadedtree, allocator: std.mem.Allocator) void {
         allocator.free(self.entries);
@@ -205,9 +308,28 @@ pub fn load_tree(io: std.Io, allocator: std.mem.Allocator, hash: [32]u8) !Loaded
     const bytes = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited);
     errdefer allocator.free(bytes);
 
-    const entries = try tree.decode_tree(bytes, allocator);
+    const decoded = try tree.decode_tree(bytes, allocator);
 
-    return .{ .bytes = bytes, .entries = entries };
+    return .{ .bytes = bytes, .entries = decoded.entries, .dirmode = decoded.dirmode };
+}
+
+// recursively walks a tree object graph, calling cb for every FILE leaf with its full crel path
+pub fn walk_tree(io: std.Io, allocator: std.mem.Allocator, roothash: [32]u8, prefix: []const u8, cb: *const fn (allocator: std.mem.Allocator, crel: []const u8, hash: [32]u8, mode: u32, ctx: *anyopaque) anyerror!void, ctx: *anyopaque) !void {
+    var loaded = try load_tree(io, allocator, roothash);
+    defer loaded.deinit(allocator);
+
+    for (loaded.entries) |e| {
+        const fullpath = if (prefix.len == 0)
+            try allocator.dupe(u8, e.name)
+        else
+            try std.fmt.allocPrint(allocator, "{s}/{s}", .{ prefix, e.name });
+        defer allocator.free(fullpath);
+
+        switch (e.kind) {
+            .file => try cb(allocator, fullpath, e.hash, e.mode, ctx),
+            .dir => try walk_tree(io, allocator, e.hash, fullpath, cb, ctx),
+        }
+    }
 }
 
 pub fn generation_path(allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, generation: u32) ![]u8 {
@@ -229,43 +351,54 @@ fn write_treehashm(io: std.Io, allocator: std.mem.Allocator, gendir: []const u8,
     const file = try std.Io.Dir.createFileAbsolute(io, markerpath, .{ .truncate = true });
     defer file.close(io);
 
-    var writerbuf: [80]u8 = undefined;
+    var writerbuf: [80]u8 = undefined; // 80 felt like it
     var fwriter = file.writer(io, &writerbuf);
     try fwriter.interface.writeAll(&hex);
     try fwriter.interface.flush();
 }
 
-pub fn materialize_generation(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, generation: u32, entries: []const Treeentry) ![]u8 {
+const Materializectx = struct {
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    gendir: []const u8,
+};
+// discard mode cuz we dont use it but don't wan unused var eeror
+fn materialize_cb(allocator: std.mem.Allocator, crel: []const u8, hash: [32]u8, mode: u32, ctx: *anyopaque) anyerror!void {
+    _ = mode;
+    const c: *Materializectx = @ptrCast(@alignCast(ctx));
+
+    const target = try content_path(allocator, hash);
+    defer allocator.free(target);
+
+    const linkpath = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ c.gendir, crel });
+    defer allocator.free(linkpath);
+
+    if (std.fs.path.dirname(linkpath)) |parent| {
+        std.Io.Dir.cwd().createDirPath(c.io, parent) catch |err| switch (err) {
+            error.PathAlreadyExists => {},
+            else => return err,
+        };
+    }
+
+    try std.Io.Dir.symLinkAbsolute(c.io, target, linkpath, .{});
+
+    log.debug2("materialized {s} -> {s}\n", .{ linkpath, target });
+}
+// smalll changes, now relies on other functions more so i deleted alot from it
+pub fn materialize_generation(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, generation: u32, roothash: [32]u8) ![]u8 {
     const gendir = try generation_path(allocator, reponame, pkgname, generation);
     errdefer allocator.free(gendir);
 
     try createdir(io, gendir);
 
-    for (entries) |e| {
-        const target = try content_path(allocator, e.hash);
-        defer allocator.free(target);
-
-        const linkpath = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ gendir, e.crel });
-        defer allocator.free(linkpath);
-
-        if (std.fs.path.dirname(linkpath)) |parent| {
-            std.Io.Dir.cwd().createDirPath(io, parent) catch |err| switch (err) {
-                error.PathAlreadyExists => {},
-                else => return err,
-            };
-        }
-
-        try std.Io.Dir.symLinkAbsolute(io, target, linkpath, .{});
-
-        log.debug2("materialized {s} -> {s}\n", .{ linkpath, target });
-    }
+    var ctx = Materializectx{ .io = io, .allocator = allocator, .gendir = gendir };
+    try walk_tree(io, allocator, roothash, "", materialize_cb, @ptrCast(&ctx));
 
     return gendir;
 }
 
-
-pub fn materialize_genh(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, generation: u32, treehash: [32]u8, entries: []const Treeentry) ![]u8 {
-    const gendir = try materialize_generation(io, allocator, reponame, pkgname, generation, entries); // gender 
+pub fn materialize_genh(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, generation: u32, treehash: [32]u8) ![]u8 {
+    const gendir = try materialize_generation(io, allocator, reponame, pkgname, generation, treehash);
     errdefer allocator.free(gendir);
 
     try write_treehashm(io, allocator, gendir, treehash);
@@ -310,7 +443,6 @@ fn ownerspath(allocator: std.mem.Allocator) ![]u8 {
     return std.fs.path.join(allocator, &.{ globals.db, "owners" });
 }
 
-// reads the owners db, returns empty slice if it doesn't exist yet
 pub fn read_owners(io: std.Io, allocator: std.mem.Allocator) ![]owners.Ownerentry {
     const path = try ownerspath(allocator);
     defer allocator.free(path);
@@ -339,12 +471,69 @@ pub fn write_owners(io: std.Io, allocator: std.mem.Allocator, entries: []const o
     try fwriter.interface.writeAll(encoded);
     try fwriter.interface.flush();
 }
-
+// merge error, fun fact most names are actually inspired by git, except strata, thats a geology term. may eventually change to when settling on v1
 pub const Mergeerror = error{pathownedbyanother};
 
-// check ownership before merging a tree into a repo, and update the owners db if successful
-// 
-pub fn merge_tree(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, entries: []const Treeentry) !void {
+const Mergectx = struct {
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    reponame: []const u8,
+    pkgname: []const u8,
+    existing: []const owners.Ownerentry,
+    updated: *std.ArrayList(owners.Ownerentry),
+};
+// same thing as in remove, we must use these, so discarding is the only way
+fn merge_checkcb(allocator: std.mem.Allocator, crel: []const u8, hash: [32]u8, mode: u32, ctx: *anyopaque) anyerror!void {
+    _ = allocator;
+    _ = hash;
+    _ = mode;
+    const c: *Mergectx = @ptrCast(@alignCast(ctx));
+
+    if (owners.find_owner(c.existing, crel)) |owner| {
+        if (!std.mem.eql(u8, owner.reponame, c.reponame) or !std.mem.eql(u8, owner.pkgname, c.pkgname)) {
+            log.err("refusing merge: {s} is already owned by {s}/{s}, conflicts with {s}/{s}\n", .{ crel, owner.reponame, owner.pkgname, c.reponame, c.pkgname });
+            return Mergeerror.pathownedbyanother;
+        }
+    }
+}
+// no need for mode = discard
+fn merge_linkcb(allocator: std.mem.Allocator, crel: []const u8, hash: [32]u8, mode: u32, ctx: *anyopaque) anyerror!void {
+    _ = mode;
+    const c: *Mergectx = @ptrCast(@alignCast(ctx));
+
+    const target = try content_path(allocator, hash);
+    defer allocator.free(target);
+
+    const linkpath = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ globals.base, crel });
+    defer allocator.free(linkpath);
+
+    if (std.fs.path.dirname(linkpath)) |parent| {
+        std.Io.Dir.cwd().createDirPath(c.io, parent) catch |err| switch (err) {
+            error.PathAlreadyExists => {},
+            else => return err,
+        };
+    }
+
+    std.Io.Dir.deleteFileAbsolute(c.io, linkpath) catch |err| switch (err) {
+        error.FileNotFound => {},
+        else => return err,
+    };
+
+    try std.Io.Dir.symLinkAbsolute(c.io, target, linkpath, .{});
+
+    log.debug2("linked {s} -> {s}\n", .{ linkpath, target });
+
+    const owned = try allocator.dupe(u8, crel);
+    if (owners.find_owner(c.updated.items, owned) == null) {
+        try c.updated.append(allocator, .{
+            .crel = owned,
+            .reponame = c.reponame,
+            .pkgname = c.pkgname,
+        });
+    }
+}
+
+pub fn merge_tree(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, roothash: [32]u8) !void {
     const existing = try read_owners(io, allocator);
     defer allocator.free(existing);
 
@@ -352,51 +541,30 @@ pub fn merge_tree(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8
     defer updated.deinit(allocator);
     try updated.appendSlice(allocator, existing);
 
-    for (entries) |e| {
-        if (owners.find_owner(existing, e.crel)) |owner| {
-            if (!std.mem.eql(u8, owner.reponame, reponame) or !std.mem.eql(u8, owner.pkgname, pkgname)) {
-                log.err("refusing merge: {s} is already owned by {s}/{s}, conflicts with {s}/{s}\n", .{ e.crel, owner.reponame, owner.pkgname, reponame, pkgname });
-                return Mergeerror.pathownedbyanother;
-            }
-        }
-    }
+    // i unrolled these now for readability
+    var checkctx = Mergectx{
+        .io = io,
+        .allocator = allocator,
+        .reponame = reponame,
+        .pkgname = pkgname,
+        .existing = existing,
+        .updated = &updated,
+    };
+    try walk_tree(io, allocator, roothash, "", merge_checkcb, @ptrCast(&checkctx));
 
-    for (entries) |e| {
-        const target = try content_path(allocator, e.hash);
-        defer allocator.free(target);
-
-        const linkpath = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ globals.base, e.crel });
-        defer allocator.free(linkpath);
-
-        if (std.fs.path.dirname(linkpath)) |parent| {
-            std.Io.Dir.cwd().createDirPath(io, parent) catch |err| switch (err) {
-                error.PathAlreadyExists => {},
-                else => return err,
-            };
-        }
-
-        std.Io.Dir.deleteFileAbsolute(io, linkpath) catch |err| switch (err) {
-            error.FileNotFound => {},
-            else => return err,
-        };
-
-        try std.Io.Dir.symLinkAbsolute(io, target, linkpath, .{});
-
-        log.debug2("linked {s} -> {s}\n", .{ linkpath, target });
-
-        if (owners.find_owner(updated.items, e.crel) == null) {
-            try updated.append(allocator, .{
-                .crel = e.crel,
-                .reponame = reponame,
-                .pkgname = pkgname,
-            });
-        }
-    }
+    var linkctx = Mergectx{
+        .io = io,
+        .allocator = allocator,
+        .reponame = reponame,
+        .pkgname = pkgname,
+        .existing = existing,
+        .updated = &updated,
+    };
+    try walk_tree(io, allocator, roothash, "", merge_linkcb, @ptrCast(&linkctx));
 
     try write_owners(io, allocator, updated.items);
 }
 
-// removes a package's ownership records, called from remove.zig alongside unlink_paths
 pub fn release_ownership(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8) !void {
     const existing = try read_owners(io, allocator);
     defer allocator.free(existing);
@@ -422,6 +590,8 @@ fn delete_tabs(io: std.Io, abspath: []const u8) !void {
     try dir.deleteTree(io, base);
 }
 
+
+// macros (use these a shit ton)
 pub fn remove_generation(io: std.Io, gendir: []const u8) !void {
     try delete_tabs(io, gendir);
 }

@@ -1,5 +1,6 @@
 //! removal: unlinks a package's symlinks from globals.base, deletes its shit. easy.
 //! rewritten for new ostree approach
+//! added better unlinking that doesn't rehash the entire shit, which was actually gonna be really performance heavy later on
 const std = @import("std");
 const globals = @import("../globals.zig");
 const db = @import("../db/db.zig");
@@ -14,7 +15,6 @@ const Owner = struct {
     entry: db.Dbentry,
 };
 
-// finds owner and deletes
 fn find_owner(io: std.Io, allocator: std.mem.Allocator, repos: []const utils.parser.Repo, name: []const u8) !?Owner {
     var found: ?Owner = null;
     var foundp: i32 = std.math.minInt(i32);
@@ -37,24 +37,34 @@ fn find_owner(io: std.Io, allocator: std.mem.Allocator, repos: []const utils.par
     return found;
 }
 
-// missing symlinks are warned
-fn unlink_paths(io: std.Io, allocator: std.mem.Allocator, entries: []const strata.Treeentry) !void {
-    for (entries) |e| {
-        const linkpath = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ globals.base, e.crel });
-        defer allocator.free(linkpath);
+const Unlinkctx = struct {
+    io: std.Io,
+};
+// you might be wondering: why discsrd hash? well we need to, unused variable issues (we don't actually USE everything)
+// but anyways right, its a newer n better design.
+fn unlink_cb(allocator: std.mem.Allocator, crel: []const u8, hash: [32]u8, mode: u32, ctx: *anyopaque) anyerror!void {
+    _ = hash;
+    _ = mode;
+    const c: *Unlinkctx = @ptrCast(@alignCast(ctx));
 
-        std.Io.Dir.deleteFileAbsolute(io, linkpath) catch |err| switch (err) {
-            error.FileNotFound => {
-                log.warn("{s} was already missing, skipping\n", .{linkpath});
-            },
-            else => return err,
-        };
+    const linkpath = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ globals.base, crel });
+    defer allocator.free(linkpath);
 
-        log.debug2("unlinked {s}\n", .{linkpath});
-    }
+    std.Io.Dir.deleteFileAbsolute(c.io, linkpath) catch |err| switch (err) {
+        error.FileNotFound => {
+            log.warn("{s} was already missing, skipping\n", .{linkpath});
+        },
+        else => return err,
+    };
+
+    log.debug2("unlinked {s}\n", .{linkpath});
 }
 
-// unlinks current, pretty much removal, but also needs to unlink another 
+fn unlink_paths(io: std.Io, allocator: std.mem.Allocator, roothash: [32]u8) !void {
+    var ctx = Unlinkctx{ .io = io };
+    try strata.walk_tree(io, allocator, roothash, "", unlink_cb, @ptrCast(&ctx));
+}
+
 fn unlink_current(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8) !void {
     const linkpath = try strata.current_path(allocator, reponame, pkgname);
     defer allocator.free(linkpath);
@@ -69,7 +79,6 @@ fn unlink_current(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8
     log.debug2("unlinked {s}\n", .{linkpath});
 }
 
-// deletes ever layer-(number)
 fn remove_stratadirs(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8) !void {
     const pkgdir = try std.fs.path.join(allocator, &.{ globals.strata, reponame, pkgname });
     defer allocator.free(pkgdir);
@@ -88,7 +97,6 @@ fn remove_stratadirs(io: std.Io, allocator: std.mem.Allocator, reponame: []const
     log.debug1("removed strata directory for {s}/{s}\n", .{ reponame, pkgname });
 }
 
-// the actual remove operation
 pub fn remove(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u8) !void {
     log.trace("starting removal of {s}\n", .{pkgname});
 
@@ -105,11 +113,8 @@ pub fn remove(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u8) !vo
 
     log.debug1("{s} is owned by repo '{s}'\n", .{ pkgname, owner.repo.name });
 
-    var loaded = try strata.load_tree(io, allocator, owner.entry.objhash);
-    defer loaded.deinit(allocator);
-
-    log.info("unlinking {d} merged paths\n", .{loaded.entries.len});
-    try unlink_paths(io, allocator, loaded.entries);
+    log.info("unlinking merged paths\n", .{});
+    try unlink_paths(io, allocator, owner.entry.objhash);
 
     log.debug1("releasing ownership records\n", .{});
     try strata.release_ownership(io, allocator, owner.repo.name, pkgname);

@@ -2,6 +2,8 @@ const std = @import("std");
 const testing = std.testing;
 const hasher = @import("hasher.zig");
 
+// YO WHY DO I EVEN HAVE THIS OF COURSE IT WORKS
+
 test "get_hash matches known sha256 for known content (which should happen)" {
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();

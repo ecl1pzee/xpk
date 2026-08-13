@@ -1,3 +1,4 @@
+//! the mainfile of the xpk package manager yayyy
 //! sigma
 const std = @import("std");
 const globals = @import("globals.zig");
@@ -48,7 +49,7 @@ fn parglay(arg: []const u8) ?u32 {
     if (!std.mem.startsWith(u8, arg, "--layer-")) return null;
     return std.fmt.parseInt(u32, arg["--layer-".len..], 10) catch null;
 }
-
+// honestly i might just move all the globals into xpk without first time setting up bullshit
 pub fn ensure_xpk(io: std.Io) !void {
     const marker = std.Io.Dir.openFileAbsolute(io, globals.firstrun, .{ .mode = .read_only }) catch |err| switch (err) {
         error.FileNotFound => null, // yayyy zig specific error that doesn't match my naming convention woohoo

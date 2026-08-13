@@ -1,4 +1,4 @@
-//! installs stuff professionally, and records it in the db, and merges it into globals.base
+//! cleanups and for the new shit in strata.zig
 const std = @import("std");
 const strata = @import("../db/strata.zig");
 const runner = @import("../build/run.zig");
@@ -9,12 +9,10 @@ const utils = @import("../utils/utils.zig");
 const config = @import("../config.zig");
 const stratum = @import("../stratum/stratum.zig");
 
-// wrapper
 fn createdir(io: std.Io, path: []const u8) !void {
     return utils.fs.createdir(io, path);
 }
-
-// strips an entire tree, will make optional at some point
+// strips a tree, of course ill make optional for people that want debug full builds, but yeah right now we strip stuff.
 fn strip_tree(io: std.Io, allocator: std.mem.Allocator, destdir: []const u8, paths: []const []const u8) !void {
     for (paths) |rel| {
         const fullpath = try std.fs.path.join(allocator, &.{ destdir, rel });
@@ -29,7 +27,7 @@ fn strip_tree(io: std.Io, allocator: std.mem.Allocator, destdir: []const u8, pat
         _ = child.wait(io) catch {};
     }
 }
-// just changes destdir perms
+// idk im making commments and this shit is very clear
 fn destdir_chown(io: std.Io, path: []const u8) !void {
     log.debug1("changing ownership of staging directory: {s}\n", .{path});
 
@@ -53,7 +51,7 @@ fn destdir_chown(io: std.Io, path: []const u8) !void {
         },
     }
 }
-// stages, need sto know destdir and buildysy
+// stages an install, needs to know buildsys to do anything.
 pub fn stage_i(io: std.Io, allocator: std.mem.Allocator, sourced: []const u8, destdir: []const u8, buildsys: []const u8) !void {
     log.trace("staging package install using {s}\n", .{buildsys});
     try createdir(io, destdir);
@@ -76,7 +74,7 @@ pub fn stage_i(io: std.Io, allocator: std.mem.Allocator, sourced: []const u8, de
     try runner.run_step(io, allocator, argv.items, sourced);
     log.debug2("package staged successfuly\n", .{});
 }
-// walks and symlinks shit
+// walk_S get it it walks a destdir and returns patht o all of them as slice
 pub fn walk_s(io: std.Io, allocator: std.mem.Allocator, destdir: []const u8) ![][]const u8 {
     log.trace("walking staging directory: {s}\n", .{destdir});
     var paths: std.ArrayList([]const u8) = .empty;
@@ -99,17 +97,16 @@ pub fn walk_s(io: std.Io, allocator: std.mem.Allocator, destdir: []const u8) ![]
     log.trace("found {d} staged files\n", .{paths.items.len});
     return paths.toOwnedSlice(allocator);
 }
-
-// strips the usr/local/ staging prefix if present
+// ended up being important, but literally just strips non-prefixed shit, and shoves it into /bin from globals.base (so /opt/xpk/bin)
 fn crel_of(rel: []const u8) []const u8 {
     return if (std.mem.startsWith(u8, rel, "usr/local/"))
         rel["usr/local/".len..]
     else
         rel;
 }
-// build tree entry per installed file
-fn build_treeentries(io: std.Io, allocator: std.mem.Allocator, destdir: []const u8, paths: []const []const u8) ![]strata.Treeentry {
-    const entries = try allocator.alloc(strata.Treeentry, paths.len);
+// most changes were here, and they were just syntax cleanups
+fn build_stagedfiles(io: std.Io, allocator: std.mem.Allocator, destdir: []const u8, paths: []const []const u8) ![]strata.Stagedfile {
+    const entries = try allocator.alloc(strata.Stagedfile, paths.len);
     errdefer allocator.free(entries);
 
     for (paths, 0..) |rel, i| {
@@ -118,6 +115,7 @@ fn build_treeentries(io: std.Io, allocator: std.mem.Allocator, destdir: []const 
 
         const file = try std.Io.Dir.openFileAbsolute(io, srcpath, .{ .mode = .read_only });
         const st = try file.stat(io);
+        
         file.close(io);
         const mode = st.permissions.toMode() & 0o777;
 
@@ -132,7 +130,8 @@ fn build_treeentries(io: std.Io, allocator: std.mem.Allocator, destdir: []const 
 
     return entries;
 }
-// actually installs everything
+// wow this ai inline editor is actually impressive (first time using inline ai)
+// helped me cleanup some of this and yeah readd the shit i wrote in strata.zig
 pub fn install(io: std.Io, allocator: std.mem.Allocator, sourced: []const u8, reponame: []const u8, pkgname: []const u8, category: []const u8, version: []const u8, xhash: [32]u8, buildsys: []const u8) !void {
     log.trace("install stage\n", .{});
 
@@ -160,31 +159,29 @@ pub fn install(io: std.Io, allocator: std.mem.Allocator, sourced: []const u8, re
     try strip_tree(io, allocator, destdir, paths);
 
     log.trace("storing {d} files in content store\n", .{paths.len});
-    const treeentries = try build_treeentries(io, allocator, destdir, paths);
-    defer allocator.free(treeentries);
+    const stagedfiles = try build_stagedfiles(io, allocator, destdir, paths);
+    defer allocator.free(stagedfiles);
 
-    log.debug1("committing tree object\n", .{});
-    const treehash = try strata.commit_tree(io, allocator, treeentries);
+    log.debug1("committing recursive tree object\n", .{});
+    const treehash = try strata.commit_tree(io, allocator, stagedfiles);
 
     if (!config.current.keep_stage) {
         try strata.cleanup_stage(io, destdir);
     }
-    // added some shit here, basically logic for generations, ability to make stratums, and and activation shit
+
     const existing = try db.read_w(io, allocator, reponame);
     defer allocator.free(existing);
     const nextgen = if (db.latest_gen(existing, pkgname)) |g| g + 1 else 0;
 
-    // materliaze gen drops a hash marker into the generation dir
     log.debug2("materializing generation {d} for {s}\n", .{ nextgen, pkgname });
-    const gendir = try strata.materialize_genh(io, allocator, reponame, pkgname, nextgen, treehash, treeentries);
+    const gendir = try strata.materialize_genh(io, allocator, reponame, pkgname, nextgen, treehash);
     defer allocator.free(gendir);
 
     log.debug2("activating generation {d}\n", .{nextgen});
     try strata.activate_generation(io, allocator, reponame, pkgname, gendir);
 
     log.debug2("merging into {s}\n", .{globals.base});
-    try strata.merge_tree(io, allocator, reponame, pkgname, treeentries);
-       
+    try strata.merge_tree(io, allocator, reponame, pkgname, treehash);
 
     const timestamp = std.Io.Timestamp.now(io, .real);
 

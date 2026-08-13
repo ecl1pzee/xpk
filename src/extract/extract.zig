@@ -4,6 +4,7 @@ const globals = @import("../globals.zig");
 const log = @import("../utils/log.zig");
 const utils = @import("../utils/utils.zig");
 
+// im on a comment spree but nothing interestin here
 
 // luckily, due to the new zig 0.16.0 api:
 // i dont need to make specific functions for each extraction

@@ -106,9 +106,13 @@ fn sync_repo(io: std.Io, allocator: std.mem.Allocator, repo: utils.parser.Repo) 
     {
         const file = try std.Io.Dir.createFileAbsolute(io, indexpath, .{ .truncate = true });
         defer file.close(io);
+
         var writerbuf: [16 * 1024]u8 = undefined;
         var fwriter = file.writer(io, &writerbuf);
+
         try fwriter.interface.writeAll(signed.body); // unwrapped body, so i dont have to do JACK SHIT for rfetch.zig (luckily)
+        // was a good design choice by me tbh
+        // idk where tf i thought of that
         try fwriter.interface.flush(); // and thats why the wrapper was my design choice, cuz we can easily just unwrap its shit and put it as a usuable repo
     }
 
@@ -133,8 +137,9 @@ pub fn pull_repo(io: std.Io, allocator: std.mem.Allocator) !void {
     }
 
     log.trace("setting up async futures\n", .{});
-    const Fut = @TypeOf(io.async(sync_repo, .{ io, allocator, repos[0] }));
-    var futures: std.ArrayList(Fut) = .empty;
+    const fut = @TypeOf(io.async(sync_repo, .{ io, allocator, repos[0] }));
+    // found out fut.Cancel exists, might use that
+    var futures: std.ArrayList(fut) = .empty;
     defer futures.deinit(allocator);
 
     // keep repo names lined up with futures so we can report which one failed

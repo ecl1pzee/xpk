@@ -1,5 +1,7 @@
 //! system wide package status for full system rollbacks, not just per package rollbacks
 //! decided not to make a types file for this one since everything is 100% exclusively used here for the current moment
+//! needs a rework too, suprisngly (in the rollback term) because ANY. Action. makes a stratum, not an update nothin just anything, and i have like what? 9 stratums from just installing and removing? i need gc to handle these later
+//! but otherwise its good
 const std = @import("std");
 const globals = @import("../globals.zig");
 const utils = @import("../utils/utils.zig");
@@ -29,6 +31,7 @@ pub const Logentry = struct {
 
 pub const Stratumerror = error{ badmagic, unsupportedvers, crcmismatch, truncated };
 // boring name, ill remake later
+// nope
 fn logpath(allocator: std.mem.Allocator) ![]u8 {
     return std.fs.path.join(allocator, &.{ globals.stratums, "log" });
 }
@@ -45,7 +48,7 @@ pub fn read_log(io: std.Io, allocator: std.mem.Allocator) ![]Logentry {
 
     return decode_log(bytes, allocator);
 }
-
+// how i feel copy pasting the exact same shit 25 times under a new name
 fn decode_log(buf: []const u8, allocator: std.mem.Allocator) ![]Logentry {
     if (buf.len < 4 + 2 + 4 + 4) return Stratumerror.truncated;
     if (!std.mem.eql(u8, buf[0..4], magic)) return Stratumerror.badmagic;
@@ -69,12 +72,16 @@ fn decode_log(buf: []const u8, allocator: std.mem.Allocator) ![]Logentry {
         const stratumnum = std.mem.readInt(u32, buf[pos..][0..4], .little);
         pos += 4;
         const ts = std.mem.readInt(i64, buf[pos..][0..8], .little);
+
         pos += 8;
         const action: Action = @enumFromInt(buf[pos]);
+
         pos += 1;
         const namelen = std.mem.readInt(u16, buf[pos..][0..2], .little);
+
         pos += 2;
         const pkgname = try allocator.dupe(u8, buf[pos..][0..namelen]);
+
         pos += namelen;
 
         e.* = .{ .stratumnum = stratumnum, .timestamp = ts, .action = action, .pkgname = pkgname };
@@ -83,7 +90,7 @@ fn decode_log(buf: []const u8, allocator: std.mem.Allocator) ![]Logentry {
     return entries;
 }
 // pretty standrad encoding logic, though im actually having a simmilar problem that i had with my toml parser, its getting too repetitive to write
-// genuinely, fucking tired  of writing these.
+// genuinely, fucking tired  of writing these. (he wasn't lyin)
 fn encode_log(allocator: std.mem.Allocator, entries: []const Logentry) ![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -170,7 +177,7 @@ pub fn stratum_path(allocator: std.mem.Allocator, num: u32) ![]u8 {
     const numstr = try std.fmt.bufPrint(&numbuf, "stratum-{d}", .{num});
     return std.fs.path.join(allocator, &.{ globals.stratums, numstr });
 }
-
+// cool ass name tho
 pub fn seal_stratum(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u8, action: Action) !void {
     try createdir(io, globals.stratums);
 
@@ -299,7 +306,7 @@ pub fn revert_stratum(io: std.Io, allocator: std.mem.Allocator, num: u32) !void 
 
     log.success("reverted to stratum-{d}\n", .{num});
 }
-
+// formatter, will move this to misc too cuz our db's contain time
 fn formatt(buf: []u8, timestamp: i64) ![]u8 {
     const epochseconds: std.time.epoch.EpochSeconds = .{ .secs = @intCast(timestamp) };
     const daysec = epochseconds.getDaySeconds();
@@ -327,7 +334,7 @@ pub fn history(io: std.Io, allocator: std.mem.Allocator) !void {
         log.info("no stratums sealed yet\n", .{});
         return;
     }
-
+    // is for later
     for (entries) |e| {
         const actionstr = switch (e.action) {
             .install => "installed",

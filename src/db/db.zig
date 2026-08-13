@@ -7,11 +7,10 @@ const log = @import("../utils/log.zig");
 // the plan is, to have (later) a sort of pacman menu where u select from where the package comes from, and an option to void that and choose highest priority.
 pub const Dbentry = types.Dbentry;
 
-
+// macro
 fn createdir(io: std.Io, path: []const u8) !void {
     return utils.fs.createdir(io, path);
 }
-
 
 fn worldpath(allocator: std.mem.Allocator, reponame: []const u8) ![]u8 {
     return std.fs.path.join(allocator, &.{ globals.db, reponame, "world" });

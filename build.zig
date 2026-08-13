@@ -1,6 +1,6 @@
 const std = @import("std");
 
-
+// i may need to remove them tests later cuz our shit works 
 // do not recommend building with release, as this is mostly io stuff and moving files, so making the binary smaller is the better choice
 pub fn build(b: *std.Build) void {
     const release = b.option(bool, "release", "strip debug + optimize") orelse false;

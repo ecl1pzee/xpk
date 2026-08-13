@@ -1,4 +1,5 @@
 //! loads xpk.conf and applies it to the relevant global state (haha get it global state roblox exploits gcc virus systemd)
+//! is simple shit ion gotta write. just uses the parser and does that
 const std = @import("std");
 const globals = @import("globals.zig");
 const parsers = @import("parsers/parsers.zig");

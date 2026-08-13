@@ -33,7 +33,7 @@ fn find_owner(io: std.Io, allocator: std.mem.Allocator, repos: []const utils.par
 
     return found;
 }
-// previous gen
+
 fn prev_gen(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, currentgen: u32) !?u32 {
     const pkgdir = try std.fs.path.join(allocator, &.{ globals.strata, reponame, pkgname });
     defer allocator.free(pkgdir);
@@ -59,7 +59,7 @@ fn prev_gen(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgn
 
     return best;
 }
-// rollbacks one thing
+
 pub fn rollback_pkg(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u8, targetgen: ?u32) !void {
     log.trace("rolling back {s}\n", .{pkgname});
 
@@ -103,17 +103,14 @@ pub fn rollback_pkg(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u
     var treehash: [32]u8 = undefined;
     _ = try std.fmt.hexToBytes(&treehash, std.mem.trim(u8, hex, " \n\r\t"));
 
-    var targettree = try strata.load_tree(io, allocator, treehash);
-    defer targettree.deinit(allocator);
-
     log.debug2("merging rolled back tree into {s}\n", .{globals.base});
-    try strata.merge_tree(io, allocator, owner.repo.name, pkgname, targettree.entries);
+    try strata.merge_tree(io, allocator, owner.repo.name, pkgname, treehash);
 
     try stratumf.seal_stratum(io, allocator, pkgname, .rollback);
 
     log.success("rolled back {s} to layer-{d}\n", .{ pkgname, gen });
 }
-// rollbacks everything via stratum
+
 pub fn rollback_sys(io: std.Io, allocator: std.mem.Allocator, targetnum: ?u32) !void {
     log.trace("rolling back whole system\n", .{});
 
@@ -169,10 +166,7 @@ pub fn rollback_sys(io: std.Io, allocator: std.mem.Allocator, targetnum: ?u32) !
             var treehash: [32]u8 = undefined;
             _ = std.fmt.hexToBytes(&treehash, std.mem.trim(u8, hex, " \n\r\t")) catch continue;
 
-            var loaded = try strata.load_tree(io, allocator, treehash);
-            defer loaded.deinit(allocator);
-
-            try strata.merge_tree(io, allocator, repoentry.name, pkgentry.name, loaded.entries);
+            try strata.merge_tree(io, allocator, repoentry.name, pkgentry.name, treehash);
         }
     }
 

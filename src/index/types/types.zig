@@ -1,5 +1,6 @@
-const std = @import("std");
+//! quick reminder to me: rework and make support multiple signatures at once, because with our current architechture these index shits look a little undereffective
 
+const std = @import("std");
 
 // fields are in this order, so they can be parsed (duh)
 pub const Idxentry = struct {

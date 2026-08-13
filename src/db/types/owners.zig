@@ -94,7 +94,7 @@ pub fn find_owner(entries: []const Ownerentry, crel: []const u8) ?Ownerentry {
     }
     return null;
 }
-
+// is ownedby :shockerface: it, finds what something is owned by
 pub fn is_ownedby(entries: []const Ownerentry, crel: []const u8, reponame: []const u8, pkgname: []const u8) bool {
     const owner = find_owner(entries, crel) orelse return false;
     return std.mem.eql(u8, owner.reponame, reponame) and std.mem.eql(u8, owner.pkgname, pkgname);

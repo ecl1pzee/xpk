@@ -1,15 +1,17 @@
 //! for macos, since sandbox-exec comes preinstalled we just roll that, for linux we are unfortunatlely for the goal of 0 dependencies (that dont come preinstalled as critical packages) will need raw namespaces
+//! sandboxxing for linux soon (maybe ill begin tmrw, but its a large project for actual good sandboxxing, and will likely be like automl tbh)
+//! oh and since its gonna be in zig its all gonna replace sandbox-exec
 const std = @import("std");
 const builtin = @import("builtin");
 const log = @import("../utils/log.zig");
-
+// i needa make this better
 pub const Sandboxopts = struct {
     allownet: bool,
     writable: []const []const u8,
     readable: []const []const u8,
 };
 
-
+// build mprotect profile wink wink
 // this will grow and become a big ass global, but this works right now for a majority of packages ive tested (like 2)  so its fine
 fn build_mprofile(allocator: std.mem.Allocator, opts: Sandboxopts) ![]u8 {
     var out: std.ArrayList(u8) = .empty;

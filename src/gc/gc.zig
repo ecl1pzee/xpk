@@ -1,4 +1,5 @@
 //! the garbage collection system
+// now better!
 const std = @import("std");
 const globals = @import("../globals.zig");
 const db = @import("../db/db.zig");
@@ -6,15 +7,14 @@ const strata = @import("../db/strata.zig");
 const utils = @import("../utils/utils.zig");
 const log = @import("../utils/log.zig");
 const config = @import("../config.zig");
-// forgot to say, first autohashmap usage!!!
 const Hashset = std.AutoHashMap([32]u8, void);
-// reads repos
+
 fn read_repos(io: std.Io, allocator: std.mem.Allocator) ![]utils.parser.Repo {
     const reposbytes = try std.Io.Dir.cwd().readFileAlloc(io, globals.reposconf, allocator, .unlimited);
     defer allocator.free(reposbytes);
     return utils.parser.parse_r(allocator, reposbytes);
 }
-// gets the current generation of a package
+
 fn current_genof(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8) !?u32 {
     const linkpath = try strata.current_path(allocator, reponame, pkgname);
     defer allocator.free(linkpath);
@@ -27,11 +27,12 @@ fn current_genof(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8,
     const target = buf[0..len];
 
     var base = std.fs.path.basename(target);
+    // should prob make layer- a global variable for future renaming (if we do)
     if (std.mem.startsWith(u8, base, "layer-")) base = base["layer-".len..];
 
     return std.fmt.parseInt(u32, base, 10) catch null;
 }
-// list disk ongens
+// didn't touch sorting in a while
 fn list_diskong(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8) ![]u32 {
     const pkgdir = try std.fs.path.join(allocator, &.{ globals.strata, reponame, pkgname });
     defer allocator.free(pkgdir);
@@ -63,7 +64,6 @@ fn list_diskong(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, 
     return gens.toOwnedSlice(allocator);
 }
 
-// figures out which package names actually have a strata dir for this repo, on disk
 fn list_ondiskpkgs(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8) ![][]const u8 {
     const repodir = try std.fs.path.join(allocator, &.{ globals.strata, reponame });
     defer allocator.free(repodir);
@@ -89,9 +89,6 @@ fn list_ondiskpkgs(io: std.Io, allocator: std.mem.Allocator, reponame: []const u
     return pkgs.toOwnedSlice(allocator);
 }
 
-
-// prune old gens
-// fixed logic
 fn prune_pkg(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, keep: u32) !usize {
     const ondiskgens = try list_diskong(io, allocator, reponame, pkgname);
     defer allocator.free(ondiskgens);
@@ -107,7 +104,6 @@ fn prune_pkg(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkg
         const isactive = activegen != null and gen == activegen.?;
 
         if (isactive) {
-            // active generation is always kept, and it still consumes a keep slot
             keptcount += 1;
             log.debug2("keeping {s}/{s} generation {d} (active, symlinked)\n", .{ reponame, pkgname, gen });
             continue;
@@ -137,7 +133,6 @@ fn prune_pkg(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkg
     return removedcount;
 }
 
-// recounciles world after gc
 fn reconcile_world(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8) !void {
     const entries = try db.read_w(io, allocator, reponame);
     defer allocator.free(entries);
@@ -145,7 +140,6 @@ fn reconcile_world(io: std.Io, allocator: std.mem.Allocator, reponame: []const u
     var kept: std.ArrayList(db.Dbentry) = .empty;
     defer kept.deinit(allocator);
 
-    // cache ondisk gens per pkgname so we don't restat the same dir for every generation entry
     var cache: std.StringHashMap([]u32) = .init(allocator);
     defer {
         var it = cache.valueIterator();
@@ -169,7 +163,21 @@ fn reconcile_world(io: std.Io, allocator: std.mem.Allocator, reponame: []const u
     try db.write_w(io, allocator, reponame, kept.items);
 }
 
-// collects live generations
+// new, marks all trees if file or a dir, recursive
+fn mark_alltrees(io: std.Io, allocator: std.mem.Allocator, roothash: [32]u8, livetrees: *Hashset, livecontent: *Hashset) !void {
+    try livetrees.put(roothash, {});
+
+    var loaded = try strata.load_tree(io, allocator, roothash);
+    defer loaded.deinit(allocator);
+
+    for (loaded.entries) |e| {
+        switch (e.kind) {
+            .file => try livecontent.put(e.hash, {}),
+            .dir => try mark_alltrees(io, allocator, e.hash, livetrees, livecontent),
+        }
+    }
+}
+
 fn collect_live(io: std.Io, allocator: std.mem.Allocator, repos: []const utils.parser.Repo, livetrees: *Hashset, livecontent: *Hashset) !void {
     for (repos) |repo| {
         if (repo.name.len == 0) continue;
@@ -197,64 +205,32 @@ fn collect_live(io: std.Io, allocator: std.mem.Allocator, repos: []const utils.p
     }
 }
 
-// marks the live generations
 fn mark_genlive(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, gen: u32, livetrees: *Hashset, livecontent: *Hashset) !void {
     const gendir = try strata.generation_path(allocator, reponame, pkgname, gen);
     defer allocator.free(gendir);
 
-    var dir = std.Io.Dir.openDirAbsolute(io, gendir, .{ .iterate = true }) catch |err| switch (err) {
-        error.FileNotFound => return,
-        else => return err,
-    };
-    defer dir.close(io);
-
-
     const markerpath = try std.fs.path.join(allocator, &.{ gendir, strata.treehashm });
     defer allocator.free(markerpath);
 
+    // hex
+    const hex = std.Io.Dir.cwd().readFileAlloc(io, markerpath, allocator, .limited(256)) catch |err| switch (err) {
+        error.FileNotFound => return,
+        else => {
+            log.warn("failed reading treehash marker {s}: {s}\n", .{ markerpath, @errorName(err) });
+            return;
+        },
+    };
+    defer allocator.free(hex);
 
-    if (std.Io.Dir.cwd().readFileAlloc(io, markerpath, allocator, .limited(256))) |hex| {
-        defer allocator.free(hex);
-        var hash: [32]u8 = undefined;
-        if (std.fmt.hexToBytes(&hash, std.mem.trim(u8, hex, " \n\r\t"))) |_| {
-            try livetrees.put(hash, {});
-        } else |_| {}
-    } else |err| switch (err) {
-        error.FileNotFound => {},
-        else => log.warn("failed reading treehash marker {s}: {s}\n", .{ markerpath, @errorName(err) }),
-    }
-
-    var walker = try dir.walk(allocator);
-    defer walker.deinit();
-
-    while (try walker.next(io)) |entry| {
-        if (entry.kind != .sym_link) continue;
-
-        const linkpath = try std.fs.path.join(allocator, &.{ gendir, entry.path });
-        defer allocator.free(linkpath);
-
-        var buf: [std.fs.max_path_bytes]u8 = undefined;
-        const len = std.Io.Dir.readLinkAbsolute(io, linkpath, &buf) catch |err| {
-            log.warn("failed reading symlink {s}: {s}\n", .{ linkpath, @errorName(err) });
-            continue;
-        };
-        const target = buf[0..len];
-
-        const filename = std.fs.path.basename(target);
-        const shard = std.fs.path.basename(std.fs.path.dirname(target) orelse continue);
-
-        if (shard.len != 2 or filename.len != 62) continue;
-
-        const fullhex = try std.fmt.allocPrint(allocator, "{s}{s}", .{ shard, filename });
-        defer allocator.free(fullhex);
-
-        var hash: [32]u8 = undefined;
-        _ = std.fmt.hexToBytes(&hash, fullhex) catch continue;
-
-        try livecontent.put(hash, {});
-    }
+    var hash: [32]u8 = undefined;
+    _ = std.fmt.hexToBytes(&hash, std.mem.trim(u8, hex, " \n\r\t")) catch return;
+    // added this shit here, and decided to fledge out in erroring in files, later on ill replace every single 'try' call with a catch (a goal)
+    mark_alltrees(io, allocator, hash, livetrees, livecontent) catch |err| {
+        log.warn("failed walking tree for {s}/{s} gen {d}: {s}\n", .{ reponame, pkgname, gen, @errorName(err) });
+    };
 }
-// sweeps directories
+// looks at dir, and sweeps it, simple.
+// does 99% of the work
 fn sweep_dir(io: std.Io, allocator: std.mem.Allocator, root: []const u8, live: *const Hashset) !usize {
     var removedcount: usize = 0;
 
@@ -324,13 +300,12 @@ fn sweep_dir(io: std.Io, allocator: std.mem.Allocator, root: []const u8, live: *
 
     return removedcount;
 }
-// actually runs everything
+// literally remains the same
 pub fn run(io: std.Io, allocator: std.mem.Allocator, keep: u32) !void {
     log.info("starting garbage collection, keeping {d} generation(s) per package\n", .{keep});
 
     const repos = try read_repos(io, allocator);
     defer allocator.free(repos);
-
 
     var prunedtotal: usize = 0;
     for (repos) |repo| {
@@ -360,9 +335,9 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, keep: u32) !void {
 
     log.info("pruned {d} old generation(s), sweeping unreferenced strata...\n", .{prunedtotal});
 
-   
     var livetrees: Hashset = .init(allocator);
     defer livetrees.deinit();
+
     var livecontent: Hashset = .init(allocator);
     defer livecontent.deinit();
 
@@ -370,11 +345,12 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, keep: u32) !void {
 
     const contentroot = try std.fs.path.join(allocator, &.{ globals.objects, "content" });
     defer allocator.free(contentroot);
+
     const treesroot = try std.fs.path.join(allocator, &.{ globals.objects, "trees" });
     defer allocator.free(treesroot);
 
     const sweptcontent = try sweep_dir(io, allocator, contentroot, &livecontent);
-   
+
     const sweptrees = try sweep_dir(io, allocator, treesroot, &livetrees);
 
     log.success("gc complete: pruned {d} generation(s), swept {d} content object(s), {d} tree object(s)\n", .{ prunedtotal, sweptcontent, sweptrees });
