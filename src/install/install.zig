@@ -1,13 +1,13 @@
-//! cleanups and for the new shit in strata.zig
+//! cleanups and for the new shit in snapshots.zig
 const std = @import("std");
-const strata = @import("../db/strata.zig");
+const snapshots = @import("../db/snapshots.zig");
 const runner = @import("../build/run.zig");
 const globals = @import("../globals.zig");
 const db = @import("../db/db.zig");
 const log = @import("../utils/log.zig");
 const utils = @import("../utils/utils.zig");
 const config = @import("../config.zig");
-const stratum = @import("../stratum/stratum.zig");
+const systree = @import("../systree/systree.zig");
 
 fn createdir(io: std.Io, path: []const u8) !void {
     return utils.fs.createdir(io, path);
@@ -105,8 +105,8 @@ fn crel_of(rel: []const u8) []const u8 {
         rel;
 }
 // most changes were here, and they were just syntax cleanups
-fn build_stagedfiles(io: std.Io, allocator: std.mem.Allocator, destdir: []const u8, paths: []const []const u8) ![]strata.Stagedfile {
-    const entries = try allocator.alloc(strata.Stagedfile, paths.len);
+fn build_stagedfiles(io: std.Io, allocator: std.mem.Allocator, destdir: []const u8, paths: []const []const u8) ![]snapshots.Stagedfile {
+    const entries = try allocator.alloc(snapshots.Stagedfile, paths.len);
     errdefer allocator.free(entries);
 
     for (paths, 0..) |rel, i| {
@@ -119,7 +119,7 @@ fn build_stagedfiles(io: std.Io, allocator: std.mem.Allocator, destdir: []const 
         file.close(io);
         const mode = st.permissions.toMode() & 0o777;
 
-        const hash = try strata.store_content(io, allocator, srcpath, mode);
+        const hash = try snapshots.store_content(io, allocator, srcpath, mode);
 
         entries[i] = .{
             .crel = crel_of(rel),
@@ -131,7 +131,7 @@ fn build_stagedfiles(io: std.Io, allocator: std.mem.Allocator, destdir: []const 
     return entries;
 }
 // wow this ai inline editor is actually impressive (first time using inline ai)
-// helped me cleanup some of this and yeah readd the shit i wrote in strata.zig
+// helped me cleanup some of this and yeah readd the shit i wrote in snapshots.zig
 pub fn install(io: std.Io, allocator: std.mem.Allocator, sourced: []const u8, reponame: []const u8, pkgname: []const u8, category: []const u8, version: []const u8, xhash: [32]u8, buildsys: []const u8) !void {
     log.trace("install stage\n", .{});
 
@@ -163,10 +163,10 @@ pub fn install(io: std.Io, allocator: std.mem.Allocator, sourced: []const u8, re
     defer allocator.free(stagedfiles);
 
     log.debug1("committing recursive tree object\n", .{});
-    const treehash = try strata.commit_tree(io, allocator, stagedfiles);
+    const treehash = try snapshots.commit_tree(io, allocator, stagedfiles);
 
     if (!config.current.keep_stage) {
-        try strata.cleanup_stage(io, destdir);
+        try snapshots.cleanup_stage(io, destdir);
     }
 
     const existing = try db.read_w(io, allocator, reponame);
@@ -174,14 +174,14 @@ pub fn install(io: std.Io, allocator: std.mem.Allocator, sourced: []const u8, re
     const nextgen = if (db.latest_gen(existing, pkgname)) |g| g + 1 else 0;
 
     log.debug2("materializing generation {d} for {s}\n", .{ nextgen, pkgname });
-    const gendir = try strata.materialize_genh(io, allocator, reponame, pkgname, nextgen, treehash);
+    const gendir = try snapshots.materialize_genh(io, allocator, reponame, pkgname, nextgen, treehash);
     defer allocator.free(gendir);
 
     log.debug2("activating generation {d}\n", .{nextgen});
-    try strata.activate_generation(io, allocator, reponame, pkgname, gendir);
+    try snapshots.activate_generation(io, allocator, reponame, pkgname, gendir);
 
     log.debug2("merging into {s}\n", .{globals.base});
-    try strata.merge_tree(io, allocator, reponame, pkgname, treehash);
+    try snapshots.merge_tree(io, allocator, reponame, pkgname, treehash);
 
     const timestamp = std.Io.Timestamp.now(io, .real);
 
@@ -197,6 +197,6 @@ pub fn install(io: std.Io, allocator: std.mem.Allocator, sourced: []const u8, re
         .generation = 0,
     });
 
-    log.debug2("sealing stratum\n", .{});
-    try stratum.seal_stratum(io, allocator, pkgname, .install);
+    log.debug2("sealing systree\n", .{});
+    try systree.seal_systree(io, allocator, pkgname, .install);
 }

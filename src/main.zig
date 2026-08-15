@@ -9,6 +9,7 @@ const config = @import("config.zig");
 const removal = @import("remove/remove.zig");
 
 // globals here
+// crickets here too
 const allocator = std.heap.smp_allocator; // for actual programs, arena allocator below for args (because frees all at once at program end)
 
 // unlike backthen with neo, where i was learning zig and i desrcibed alot of my actions in code to remember them, i won't do the same here.
@@ -34,25 +35,22 @@ const allocator = std.heap.smp_allocator; // for actual programs, arena allocato
 // this makes reading really easy because you can just look at the end of the function to see what it needs
 
 
-fn createdir(io: std.Io, path: []const u8) !void {
-    std.Io.Dir.createDirAbsolute(
-        io,
-        path,
-        .default_dir,
-    ) catch |err| switch (err) {
-        error.PathAlreadyExists => {},
-        else => return err,
-    };
+inline fn createdir(io: std.Io, path: []const u8) !void {
+    return utils.fs.createdir(io, path);
 }
+
+
 // helper
 fn parglay(arg: []const u8) ?u32 {
     if (!std.mem.startsWith(u8, arg, "--layer-")) return null;
     return std.fmt.parseInt(u32, arg["--layer-".len..], 10) catch null;
 }
+
 // honestly i might just move all the globals into xpk without first time setting up bullshit
 pub fn ensure_xpk(io: std.Io) !void {
     const marker = std.Io.Dir.openFileAbsolute(io, globals.firstrun, .{ .mode = .read_only }) catch |err| switch (err) {
         error.FileNotFound => null, // yayyy zig specific error that doesn't match my naming convention woohoo
+        // thinking of, revamping naming convention in the future since rn its just 'bullshit so i can code quickly and use functions fast' unlike in automl where i took my sweeeeet time
         else => return err,
     };
     if (marker) |file| {
@@ -64,9 +62,6 @@ pub fn ensure_xpk(io: std.Io) !void {
 
     // set up all globals
     log.info("setting up globals...\n", .{});
-    try createdir(io, globals.base);
-    try createdir(io, globals.db);
-    try createdir(io, globals.local);
     try createdir(io, globals.tmp);
     try utils.sync.init_repo(io);
 
@@ -85,7 +80,8 @@ pub fn main(init: std.process.Init) !void {
     const args = try init.minimal.args.toSlice(arena);
 
     // tmp is wiped every reboot, so its only normal if i put it in here
-    try createdir(io, globals.tmp); 
+    // decided this isn't very performance heavy
+    try createdir(io, globals.tmp);
  
     // creation all in function
     try ensure_xpk(io);
@@ -138,7 +134,7 @@ pub fn main(init: std.process.Init) !void {
         try utils.misc.search(io, allocator, query);
     } else 
 
-    if (std.mem.eql(u8, args[1], "gc")) {
+    if (std.mem.eql(u8, args[1], "gc") or std.mem.eql(u8, args[1], "garbage-collect")) {
         try utils.cli.root();
 
         var keep: u32 = config.current.max_gens;
@@ -195,7 +191,7 @@ pub fn main(init: std.process.Init) !void {
     } else
 
     if (std.mem.eql(u8, args[1], "history")) {
-        try utils.stratum.history(io, allocator);
+        try utils.systree.history(io, allocator);
         return;
     } else
 

@@ -7,9 +7,15 @@ const install = @import("install/install.zig").install;
 const log = @import("utils/log.zig");
 const config = @import("config.zig");
 
+inline fn createdir(io: std.Io, path: []const u8) !void {
+    return utils.fs.createdir(io, path);
+}
+
 // just the global installer function
 pub fn get_package(io: std.Io, allocator: std.mem.Allocator, package: [:0]const u8) !void {
     try tmp_chown(io, globals.tmp);
+    try createdir(io, globals.db); // i noticed that i never actually run this command anywhere but ensure_xpk, so its here now (god my codebase is MESSY)
+    
     var pkgurl = try utils.installer.remote_fetch(io, allocator, package);
     defer pkgurl.deinit();
     

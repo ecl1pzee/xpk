@@ -1,6 +1,6 @@
 //! system wide package status for full system rollbacks, not just per package rollbacks
 //! decided not to make a types file for this one since everything is 100% exclusively used here for the current moment
-//! needs a rework too, suprisngly (in the rollback term) because ANY. Action. makes a stratum, not an update nothin just anything, and i have like what? 9 stratums from just installing and removing? i need gc to handle these later
+//! needs a rework too, suprisngly (in the rollback term) because ANY. Action. makes a systree, not an update nothin just anything, and i have like what? 9 systree from just installing and removing? i need gc to handle these later
 //! but otherwise its good
 const std = @import("std");
 const globals = @import("../globals.zig");
@@ -23,17 +23,17 @@ pub const Action = enum(u8) {
 };
 
 pub const Logentry = struct {
-    stratumnum: u32,
+    systreenum: u32,
     timestamp: i64,
     action: Action,
     pkgname: []const u8,
 };
 
-pub const Stratumerror = error{ badmagic, unsupportedvers, crcmismatch, truncated };
+pub const systreeerror = error{ badmagic, unsupportedvers, crcmismatch, truncated };
 // boring name, ill remake later
 // nope
 fn logpath(allocator: std.mem.Allocator) ![]u8 {
-    return std.fs.path.join(allocator, &.{ globals.stratums, "log" });
+    return std.fs.path.join(allocator, &.{ globals.systree, "log" });
 }
 
 pub fn read_log(io: std.Io, allocator: std.mem.Allocator) ![]Logentry {
@@ -50,26 +50,26 @@ pub fn read_log(io: std.Io, allocator: std.mem.Allocator) ![]Logentry {
 }
 // how i feel copy pasting the exact same shit 25 times under a new name
 fn decode_log(buf: []const u8, allocator: std.mem.Allocator) ![]Logentry {
-    if (buf.len < 4 + 2 + 4 + 4) return Stratumerror.truncated;
-    if (!std.mem.eql(u8, buf[0..4], magic)) return Stratumerror.badmagic;
+    if (buf.len < 4 + 2 + 4 + 4) return systreeerror.truncated;
+    if (!std.mem.eql(u8, buf[0..4], magic)) return systreeerror.badmagic;
 
     var pos: usize = 4;
     const version = std.mem.readInt(u16, buf[pos..][0..2], .little);
     pos += 2;
-    if (version != formatvers) return Stratumerror.unsupportedvers;
+    if (version != formatvers) return systreeerror.unsupportedvers;
 
     const count = std.mem.readInt(u32, buf[pos..][0..4], .little);
     pos += 4;
 
     const storedcrc = std.mem.readInt(u32, buf[buf.len - 4 ..][0..4], .little);
     const expectedcrc = std.hash.Crc32.hash(buf[0 .. buf.len - 4]);
-    if (storedcrc != expectedcrc) return Stratumerror.crcmismatch;
+    if (storedcrc != expectedcrc) return systreeerror.crcmismatch;
 
     const entries = try allocator.alloc(Logentry, count);
     errdefer allocator.free(entries);
 
     for (entries) |*e| {
-        const stratumnum = std.mem.readInt(u32, buf[pos..][0..4], .little);
+        const systreenum = std.mem.readInt(u32, buf[pos..][0..4], .little);
         pos += 4;
         const ts = std.mem.readInt(i64, buf[pos..][0..8], .little);
 
@@ -84,7 +84,7 @@ fn decode_log(buf: []const u8, allocator: std.mem.Allocator) ![]Logentry {
 
         pos += namelen;
 
-        e.* = .{ .stratumnum = stratumnum, .timestamp = ts, .action = action, .pkgname = pkgname };
+        e.* = .{ .systreenum = systreenum, .timestamp = ts, .action = action, .pkgname = pkgname };
     }
 
     return entries;
@@ -107,7 +107,7 @@ fn encode_log(allocator: std.mem.Allocator, entries: []const Logentry) ![]u8 {
 
     for (entries) |e| {
         var numbuf: [4]u8 = undefined;
-        std.mem.writeInt(u32, &numbuf, e.stratumnum, .little);
+        std.mem.writeInt(u32, &numbuf, e.systreenum, .little);
         try out.appendSlice(allocator, &numbuf);
 
         var tsbuf: [8]u8 = undefined;
@@ -146,8 +146,8 @@ fn write_log(io: std.Io, allocator: std.mem.Allocator, entries: []const Logentry
     try fwriter.interface.flush();
 }
 
-fn latest_stratum(io: std.Io, allocator: std.mem.Allocator) !u32 {
-    var dir = std.Io.Dir.openDirAbsolute(io, globals.stratums, .{ .iterate = true }) catch |err| switch (err) {
+fn latest_systree(io: std.Io, allocator: std.mem.Allocator) !u32 {
+    var dir = std.Io.Dir.openDirAbsolute(io, globals.systree, .{ .iterate = true }) catch |err| switch (err) {
         error.FileNotFound => return 0,
         else => return err,
     };
@@ -159,9 +159,9 @@ fn latest_stratum(io: std.Io, allocator: std.mem.Allocator) !u32 {
     var it = dir.iterate();
     while (try it.next(io)) |entry| {
         if (entry.kind != .directory) continue;
-        if (!std.mem.startsWith(u8, entry.name, "stratum-")) continue;
+        if (!std.mem.startsWith(u8, entry.name, "systree-")) continue;
 
-        const num = std.fmt.parseInt(u32, entry.name["stratum-".len..], 10) catch continue;
+        const num = std.fmt.parseInt(u32, entry.name["systree-".len..], 10) catch continue;
         if (!found or num > best) {
             best = num;
             found = true;
@@ -172,19 +172,19 @@ fn latest_stratum(io: std.Io, allocator: std.mem.Allocator) !u32 {
     return if (found) best else 0;
 }
 
-pub fn stratum_path(allocator: std.mem.Allocator, num: u32) ![]u8 {
+pub fn systree_path(allocator: std.mem.Allocator, num: u32) ![]u8 {
     var numbuf: [10]u8 = undefined;
-    const numstr = try std.fmt.bufPrint(&numbuf, "stratum-{d}", .{num});
-    return std.fs.path.join(allocator, &.{ globals.stratums, numstr });
+    const numstr = try std.fmt.bufPrint(&numbuf, "systree-{d}", .{num});
+    return std.fs.path.join(allocator, &.{ globals.systree, numstr });
 }
 // cool ass name tho
-pub fn seal_stratum(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u8, action: Action) !void {
-    try createdir(io, globals.stratums);
+pub fn seal_systree(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u8, action: Action) !void {
+    try createdir(io, globals.systree);
 
-    const last = try latest_stratum(io, allocator);
+    const last = try latest_systree(io, allocator);
     const nextnum = last + 1;
 
-    const dest = try stratum_path(allocator, nextnum);
+    const dest = try systree_path(allocator, nextnum);
     defer allocator.free(dest);
 
     const tmppath = try std.fmt.allocPrint(allocator, "{s}.tmp-{d}", .{ dest, std.Io.Timestamp.now(io, .real).toSeconds() });
@@ -205,9 +205,9 @@ pub fn seal_stratum(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u
         var repodir = try std.Io.Dir.openDirAbsolute(io, repopath, .{ .iterate = true });
         defer repodir.close(io);
 
-        const stratumrepodir = try std.fs.path.join(allocator, &.{ tmppath, repoentry.name });
-        defer allocator.free(stratumrepodir);
-        try createdir(io, stratumrepodir);
+        const systreerepodir = try std.fs.path.join(allocator, &.{ tmppath, repoentry.name });
+        defer allocator.free(systreerepodir);
+        try createdir(io, systreerepodir);
 
         var pkgit = repodir.iterate();
         while (try pkgit.next(io)) |pkgentry| {
@@ -220,7 +220,7 @@ pub fn seal_stratum(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u
             const len = try std.Io.Dir.readLinkAbsolute(io, linkpath, &buf);
             const target = buf[0..len];
 
-            const snappath = try std.fs.path.join(allocator, &.{ stratumrepodir, pkgentry.name });
+            const snappath = try std.fs.path.join(allocator, &.{ systreerepodir, pkgentry.name });
             defer allocator.free(snappath);
 
             try std.Io.Dir.symLinkAbsolute(io, target, snappath, .{});
@@ -239,7 +239,7 @@ pub fn seal_stratum(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u
     defer list.deinit(allocator);
     try list.appendSlice(allocator, log_entries);
     try list.append(allocator, .{
-        .stratumnum = nextnum,
+        .systreenum = nextnum,
         .timestamp = std.Io.Timestamp.now(io, .real).toSeconds(),
         .action = action,
         .pkgname = pkgname,
@@ -247,45 +247,45 @@ pub fn seal_stratum(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u
 
     try write_log(io, allocator, list.items);
 
-    log.debug1("sealed stratum-{d}\n", .{nextnum});
+    log.debug1("sealed systree-{d}\n", .{nextnum});
 }
 
-pub fn revert_stratum(io: std.Io, allocator: std.mem.Allocator, num: u32) !void {
-    const src = try stratum_path(allocator, num);
+pub fn revert_systree(io: std.Io, allocator: std.mem.Allocator, num: u32) !void {
+    const src = try systree_path(allocator, num);
     defer allocator.free(src);
 
-    var stratumdir = std.Io.Dir.openDirAbsolute(io, src, .{ .iterate = true }) catch |err| switch (err) {
+    var systreedir = std.Io.Dir.openDirAbsolute(io, src, .{ .iterate = true }) catch |err| switch (err) {
         error.FileNotFound => {
-            log.err("stratum-{d} doesn't exist\n", .{num});
-            return error.stratumnotfound;
+            log.err("systree-{d} doesn't exist\n", .{num});
+            return error.systreenotfound;
         },
         else => return err,
     };
-    defer stratumdir.close(io);
+    defer systreedir.close(io);
 
-    var repoit = stratumdir.iterate();
+    var repoit = systreedir.iterate();
     while (try repoit.next(io)) |repoentry| {
         if (repoentry.kind != .directory) continue;
 
-        const stratumrepopath = try std.fs.path.join(allocator, &.{ src, repoentry.name });
-        defer allocator.free(stratumrepopath);
+        const systreerepopath = try std.fs.path.join(allocator, &.{ src, repoentry.name });
+        defer allocator.free(systreerepopath);
 
-        var stratumrepodir = try std.Io.Dir.openDirAbsolute(io, stratumrepopath, .{ .iterate = true });
-        defer stratumrepodir.close(io);
+        var systreerepodir = try std.Io.Dir.openDirAbsolute(io, systreerepopath, .{ .iterate = true });
+        defer systreerepodir.close(io);
 
         const currentrepodir = try std.fs.path.join(allocator, &.{ globals.current, repoentry.name });
         defer allocator.free(currentrepodir);
         try createdir(io, currentrepodir);
 
-        var pkgit = stratumrepodir.iterate();
+        var pkgit = systreerepodir.iterate();
         while (try pkgit.next(io)) |pkgentry| {
             if (pkgentry.kind != .sym_link) continue;
 
-            const stratumlinkpath = try std.fs.path.join(allocator, &.{ stratumrepopath, pkgentry.name });
-            defer allocator.free(stratumlinkpath);
+            const systreelinkpath = try std.fs.path.join(allocator, &.{ systreerepopath, pkgentry.name });
+            defer allocator.free(systreelinkpath);
 
             var buf: [std.fs.max_path_bytes]u8 = undefined;
-            const len = try std.Io.Dir.readLinkAbsolute(io, stratumlinkpath, &buf);
+            const len = try std.Io.Dir.readLinkAbsolute(io, systreelinkpath, &buf);
             const target = buf[0..len];
 
             const currentlinkpath = try std.fs.path.join(allocator, &.{ currentrepodir, pkgentry.name });
@@ -304,7 +304,7 @@ pub fn revert_stratum(io: std.Io, allocator: std.mem.Allocator, num: u32) !void 
         }
     }
 
-    log.success("reverted to stratum-{d}\n", .{num});
+    log.success("reverted to systree-{d}\n", .{num});
 }
 // formatter, will move this to misc too cuz our db's contain time
 fn formatt(buf: []u8, timestamp: i64) ![]u8 {
@@ -331,7 +331,7 @@ pub fn history(io: std.Io, allocator: std.mem.Allocator) !void {
     }
 
     if (entries.len == 0) {
-        log.info("no stratums sealed yet\n", .{});
+        log.info("no systree sealed yet\n", .{});
         return;
     }
     // is for later
@@ -347,7 +347,7 @@ pub fn history(io: std.Io, allocator: std.mem.Allocator) !void {
         var tsbuf: [32]u8 = undefined;
         const tsstr = try formatt(&tsbuf, e.timestamp);
 
-        log.print("stratum-{d}  {s}  {s} {s}\n", .{ e.stratumnum, tsstr, actionstr, e.pkgname });
+        log.print("systree-{d}  {s}  {s} {s}\n", .{ e.systreenum, tsstr, actionstr, e.pkgname });
     }
 }
 

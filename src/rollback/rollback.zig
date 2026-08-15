@@ -3,8 +3,8 @@ const std = @import("std");
 const globals = @import("../globals.zig");
 const utils = @import("../utils/utils.zig");
 const db = @import("../db/db.zig");
-const strata = @import("../db/strata.zig");
-const stratumf = @import("../stratum/stratum.zig");
+const snapshots = @import("../db/snapshots.zig");
+const systreef = @import("../systree/systree.zig");
 const log = @import("../utils/log.zig");
 
 const Owner = struct {
@@ -35,7 +35,7 @@ fn find_owner(io: std.Io, allocator: std.mem.Allocator, repos: []const utils.par
 }
 
 fn prev_gen(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, currentgen: u32) !?u32 {
-    const pkgdir = try std.fs.path.join(allocator, &.{ globals.strata, reponame, pkgname });
+    const pkgdir = try std.fs.path.join(allocator, &.{ globals.snapshots, reponame, pkgname });
     defer allocator.free(pkgdir);
 
     var dir = std.Io.Dir.openDirAbsolute(io, pkgdir, .{ .iterate = true }) catch |err| switch (err) {
@@ -79,7 +79,7 @@ pub fn rollback_pkg(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u
         return error.nopreviousgeneration;
     };
 
-    const gendir = try strata.generation_path(allocator, owner.repo.name, pkgname, gen);
+    const gendir = try snapshots.generation_path(allocator, owner.repo.name, pkgname, gen);
     defer allocator.free(gendir);
 
     var checkfile = std.Io.Dir.openDirAbsolute(io, gendir, .{}) catch |err| switch (err) {
@@ -92,9 +92,9 @@ pub fn rollback_pkg(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u
     checkfile.close(io);
 
     log.debug1("pointing {s} at layer-{d}\n", .{ pkgname, gen });
-    try strata.activate_generation(io, allocator, owner.repo.name, pkgname, gendir);
+    try snapshots.activate_generation(io, allocator, owner.repo.name, pkgname, gendir);
 
-    const markerpath = try std.fs.path.join(allocator, &.{ gendir, strata.treehashm });
+    const markerpath = try std.fs.path.join(allocator, &.{ gendir, snapshots.treehashm });
     defer allocator.free(markerpath);
 
     const hex = try std.Io.Dir.cwd().readFileAlloc(io, markerpath, allocator, .limited(256));
@@ -104,9 +104,9 @@ pub fn rollback_pkg(io: std.Io, allocator: std.mem.Allocator, pkgname: []const u
     _ = try std.fmt.hexToBytes(&treehash, std.mem.trim(u8, hex, " \n\r\t"));
 
     log.debug2("merging rolled back tree into {s}\n", .{globals.base});
-    try strata.merge_tree(io, allocator, owner.repo.name, pkgname, treehash);
+    try snapshots.merge_tree(io, allocator, owner.repo.name, pkgname, treehash);
 
-    try stratumf.seal_stratum(io, allocator, pkgname, .rollback);
+    try systreef.seal_systree(io, allocator, pkgname, .rollback);
 
     log.success("rolled back {s} to layer-{d}\n", .{ pkgname, gen });
 }
@@ -117,21 +117,21 @@ pub fn rollback_sys(io: std.Io, allocator: std.mem.Allocator, targetnum: ?u32) !
     var num = targetnum;
 
     if (num == null) {
-        const entries = try stratumf.read_log(io, allocator);
+        const entries = try systreef.read_log(io, allocator);
         defer {
             for (entries) |e| allocator.free(e.pkgname);
             allocator.free(entries);
         }
 
         if (entries.len < 2) {
-            log.warn("not enough stratums sealed to roll back\n", .{});
-            return error.nopreviousstratum;
+            log.warn("not enough systree's sealed to roll back\n", .{});
+            return error.noprevioussystree;
         }
 
-        num = entries[entries.len - 2].stratumnum;
+        num = entries[entries.len - 2].systreenum;
     }
 
-    try stratumf.revert_stratum(io, allocator, num.?);
+    try systreef.revert_systree(io, allocator, num.?);
 
     var currentdir = try std.Io.Dir.openDirAbsolute(io, globals.current, .{ .iterate = true });
     defer currentdir.close(io);
@@ -157,7 +157,7 @@ pub fn rollback_sys(io: std.Io, allocator: std.mem.Allocator, targetnum: ?u32) !
             const len = try std.Io.Dir.readLinkAbsolute(io, linkpath, &buf);
             const gendir = buf[0..len];
 
-            const markerpath = try std.fs.path.join(allocator, &.{ gendir, strata.treehashm });
+            const markerpath = try std.fs.path.join(allocator, &.{ gendir, snapshots.treehashm });
             defer allocator.free(markerpath);
 
             const hex = std.Io.Dir.cwd().readFileAlloc(io, markerpath, allocator, .limited(256)) catch continue;
@@ -166,11 +166,11 @@ pub fn rollback_sys(io: std.Io, allocator: std.mem.Allocator, targetnum: ?u32) !
             var treehash: [32]u8 = undefined;
             _ = std.fmt.hexToBytes(&treehash, std.mem.trim(u8, hex, " \n\r\t")) catch continue;
 
-            try strata.merge_tree(io, allocator, repoentry.name, pkgentry.name, treehash);
+            try snapshots.merge_tree(io, allocator, repoentry.name, pkgentry.name, treehash);
         }
     }
 
-    try stratumf.seal_stratum(io, allocator, "system", .rollback);
+    try systreef.seal_systree(io, allocator, "system", .rollback);
 
     log.success("system rolled back\n", .{});
 }

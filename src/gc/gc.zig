@@ -3,7 +3,7 @@
 const std = @import("std");
 const globals = @import("../globals.zig");
 const db = @import("../db/db.zig");
-const strata = @import("../db/strata.zig");
+const snapshots = @import("../db/snapshots.zig");
 const utils = @import("../utils/utils.zig");
 const log = @import("../utils/log.zig");
 const config = @import("../config.zig");
@@ -16,7 +16,7 @@ fn read_repos(io: std.Io, allocator: std.mem.Allocator) ![]utils.parser.Repo {
 }
 
 fn current_genof(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8) !?u32 {
-    const linkpath = try strata.current_path(allocator, reponame, pkgname);
+    const linkpath = try snapshots.current_path(allocator, reponame, pkgname);
     defer allocator.free(linkpath);
 
     var buf: [std.fs.max_path_bytes]u8 = undefined;
@@ -34,7 +34,7 @@ fn current_genof(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8,
 }
 // didn't touch sorting in a while
 fn list_diskong(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8) ![]u32 {
-    const pkgdir = try std.fs.path.join(allocator, &.{ globals.strata, reponame, pkgname });
+    const pkgdir = try std.fs.path.join(allocator, &.{ globals.snapshots, reponame, pkgname });
     defer allocator.free(pkgdir);
 
     var gens: std.ArrayList(u32) = .empty;
@@ -65,7 +65,7 @@ fn list_diskong(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, 
 }
 
 fn list_ondiskpkgs(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8) ![][]const u8 {
-    const repodir = try std.fs.path.join(allocator, &.{ globals.strata, reponame });
+    const repodir = try std.fs.path.join(allocator, &.{ globals.snapshots, reponame });
     defer allocator.free(repodir);
 
     var pkgs: std.ArrayList([]const u8) = .empty;
@@ -115,10 +115,10 @@ fn prune_pkg(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkg
             continue;
         }
 
-        const gendir = try strata.generation_path(allocator, reponame, pkgname, gen);
+        const gendir = try snapshots.generation_path(allocator, reponame, pkgname, gen);
         defer allocator.free(gendir);
 
-        strata.remove_generation(io, gendir) catch |err| switch (err) {
+        snapshots.remove_generation(io, gendir) catch |err| switch (err) {
             error.FileNotFound => {},
             else => {
                 log.warn("failed removing generation {d} of {s}: {s}\n", .{ gen, pkgname, @errorName(err) });
@@ -167,7 +167,7 @@ fn reconcile_world(io: std.Io, allocator: std.mem.Allocator, reponame: []const u
 fn mark_alltrees(io: std.Io, allocator: std.mem.Allocator, roothash: [32]u8, livetrees: *Hashset, livecontent: *Hashset) !void {
     try livetrees.put(roothash, {});
 
-    var loaded = try strata.load_tree(io, allocator, roothash);
+    var loaded = try snapshots.load_tree(io, allocator, roothash);
     defer loaded.deinit(allocator);
 
     for (loaded.entries) |e| {
@@ -183,7 +183,7 @@ fn collect_live(io: std.Io, allocator: std.mem.Allocator, repos: []const utils.p
         if (repo.name.len == 0) continue;
 
         const pkgs = list_ondiskpkgs(io, allocator, repo.name) catch |err| {
-            log.warn("failed listing strata packages for '{s}': {s}\n", .{ repo.name, @errorName(err) });
+            log.warn("failed listing snapshots packages for '{s}': {s}\n", .{ repo.name, @errorName(err) });
             continue;
         };
         defer {
@@ -206,10 +206,10 @@ fn collect_live(io: std.Io, allocator: std.mem.Allocator, repos: []const utils.p
 }
 
 fn mark_genlive(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, gen: u32, livetrees: *Hashset, livecontent: *Hashset) !void {
-    const gendir = try strata.generation_path(allocator, reponame, pkgname, gen);
+    const gendir = try snapshots.generation_path(allocator, reponame, pkgname, gen);
     defer allocator.free(gendir);
 
-    const markerpath = try std.fs.path.join(allocator, &.{ gendir, strata.treehashm });
+    const markerpath = try std.fs.path.join(allocator, &.{ gendir, snapshots.treehashm });
     defer allocator.free(markerpath);
 
     // hex
@@ -312,7 +312,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, keep: u32) !void {
         if (repo.name.len == 0) continue;
 
         const pkgs = list_ondiskpkgs(io, allocator, repo.name) catch |err| {
-            log.warn("failed listing strata packages for '{s}': {s}\n", .{ repo.name, @errorName(err) });
+            log.warn("failed listing snapshots packages for '{s}': {s}\n", .{ repo.name, @errorName(err) });
             continue;
         };
         defer {
@@ -333,7 +333,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, keep: u32) !void {
         };
     }
 
-    log.info("pruned {d} old generation(s), sweeping unreferenced strata...\n", .{prunedtotal});
+    log.info("pruned {d} old generation(s), sweeping unreferenced snapshots...\n", .{prunedtotal});
 
     var livetrees: Hashset = .init(allocator);
     defer livetrees.deinit();

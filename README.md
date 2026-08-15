@@ -93,7 +93,7 @@ It is important to note that reproducibility alone does not prove software is sa
 Build Output verification
 =========================
 
-XPK will aim to have a build output verification, where if packages tries to overwrite another package, it can easily be stopped by checking the trees file, plus this is difficult in practice for the attacker too because of how our hashing system works, and stratums + stratus.
+XPK will aim to have a build output verification, where if packages tries to overwrite another package, it can easily be stopped by checking the trees file, plus this is difficult in practice for the attacker too because of how our hashing system works, and systree's + snapshots.
 
 If that happens, package will be rejected for install for violating policy.
 

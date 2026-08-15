@@ -1,3 +1,4 @@
+// misc file for helping the user manage packages, and see what they've installed
 const std = @import("std");
 const types = @import("../db/types/types.zig");
 const db = @import("../db/db.zig");
@@ -6,11 +7,16 @@ const parse_r = @import("../parsers/parsers.zig").parse_r;
 const log = @import("../utils/log.zig");
 
 
+const Repopkgs = struct {
+    name: []const u8,
+    pkgs: std.ArrayList(types.Dbentry),
+};
+
 // lists all installed packages frommm allllll places
 pub fn list(io: std.Io, allocator: std.mem.Allocator) !void {
     log.trace("starting package list operation\n", .{});
 
-    const reposbytes = std.Io.Dir.cwd().readFileAlloc(io, globals.reposconf, allocator, .unlimited) catch |err| {
+    const reposbytes = std.Io.Dir.cwd().readFileAlloc(io,globals.reposconf,allocator,.unlimited) catch |err| {
         log.err("failed reading repos: {s}\n", .{@errorName(err)});
         return err;
     };
@@ -26,28 +32,36 @@ pub fn list(io: std.Io, allocator: std.mem.Allocator) !void {
 
     log.debug1("loaded {d} repositories\n", .{repos.len});
 
-    var total: usize = 0;
+    // dedups.
+    var reposwithpkgs: std.ArrayList(Repopkgs) = .empty;
+    defer {
+        for (reposwithpkgs.items) |*rp| {
+            rp.pkgs.deinit(allocator);
+        }
+        reposwithpkgs.deinit(allocator);
+    }
 
     for (repos) |repo| {
         log.trace("reading database for repo '{s}'\n", .{repo.name});
 
         const entries = db.read_w(io, allocator, repo.name) catch |err| {
-            log.warn("failed reading database '{s}': {s}\n", .{repo.name, @errorName(err)});
+            log.warn("failed reading database '{s}': {s}\n",.{ repo.name, @errorName(err) });
             continue;
         };
+        
         defer allocator.free(entries);
 
-        log.debug2("repo '{s}' contains {d} generation entries\n", .{repo.name, entries.len});
+        log.debug2("repo '{s}' contains {d} generation entries\n", .{ repo.name, entries.len });
 
-        // dedupe
         var seen: std.StringHashMap(void) = .init(allocator);
         defer seen.deinit();
 
         var current: std.ArrayList(types.Dbentry) = .empty;
-        defer current.deinit(allocator);
+        errdefer current.deinit(allocator);
 
         for (entries) |e| {
             if (seen.contains(e.name)) continue;
+
             try seen.put(e.name, {});
 
             const active = db.current_e(entries, e.name) orelse continue;
@@ -56,24 +70,64 @@ pub fn list(io: std.Io, allocator: std.mem.Allocator) !void {
 
         if (current.items.len == 0) {
             log.debug3("skipping empty repo '{s}'\n", .{repo.name});
+            current.deinit(allocator);
             continue;
         }
 
-        log.info("{s}:\n", .{repo.name});
+        try reposwithpkgs.append(allocator, .{.name = repo.name, .pkgs = current});
+    }
 
-        for (current.items) |pkg| {
-            log.debug3("printing package {s}/{s} (gen {d})\n", .{pkg.category, pkg.name, pkg.generation});
+    var total: usize = 0;
 
-            log.print("  {s}/{s} {s} (gen {d})\n", .{pkg.category, pkg.name, pkg.version, pkg.generation});
+    if (reposwithpkgs.items.len == 0) {
+        log.success("0 package(s) installed\n", .{}); //technichally a sucess cuz it didn't fail
+        return;
+    }
+
+    const issolo = reposwithpkgs.items.len == 1;
+
+    for (reposwithpkgs.items, 0..) |rp, ri| {
+        const islastrepo = ri == reposwithpkgs.items.len - 1;
+
+        const repobranch: []const u8 =
+            if (issolo) "├─"
+            else if (islastrepo) "└─"
+            else "├─";
+
+        const childprefix: []const u8 =
+            if (issolo) "   "
+            else if (islastrepo) "   "
+            else "│  ";
+
+        log.print("{s} {s}\n", .{repobranch,rp.name});
+
+        for (rp.pkgs.items, 0..) |pkg, pi| {
+            log.debug3(
+                "printing package {s}/{s} (gen {d})\n",
+                .{ pkg.category, pkg.name, pkg.generation },
+            );
+
+            const islastpkg = pi == rp.pkgs.items.len - 1;
+            const pkgbranch: []const u8 =
+                if (islastpkg) "└─"
+                else "├─";
+            // genius design
+            log.print("{s}{s} {s}/{s} {s} (gen {d})\n", .{childprefix,pkgbranch, pkg.category,  pkg.name, pkg.version, pkg.generation});
 
             total += 1;
         }
-
-        log.newline("\n");
     }
 
-    log.success("{d} package(s) installed\n", .{total});
+    log.newline("");
+
+    if (reposwithpkgs.items.len == 1) {
+        log.success("{d} package(s) installed\n", .{total});
+    } else {
+        log.success("{d} package(s) installed across {d} repo(s)\n", .{ total, reposwithpkgs.items.len });
+    }
 }
+
+
 
 
 // searches INSTALLED packages, only matches against the currently active generation
@@ -98,7 +152,7 @@ pub fn search(io: std.Io, allocator: std.mem.Allocator, query: []const u8) !void
         log.trace("searching repo '{s}'\n", .{repo.name});
 
         const entries = db.read_w(io, allocator, repo.name) catch |err| {
-            log.warn("failed reading database '{s}': {s}\n", .{repo.name, @errorName(err)});
+            log.warn("failed reading database '{s}': {s}\n", .{ repo.name, @errorName(err) });
             continue;
         };
         defer allocator.free(entries);
@@ -112,14 +166,14 @@ pub fn search(io: std.Io, allocator: std.mem.Allocator, query: []const u8) !void
 
             const pkg = db.current_e(entries, e.name) orelse continue;
 
-            log.debug3("checking {s}/{s}\n", .{pkg.category, pkg.name});
+            log.debug3("checking {s}/{s}\n", .{ pkg.category, pkg.name });
 
             if (std.mem.indexOf(u8, pkg.name, query) != null or
                 std.mem.indexOf(u8, pkg.category, query) != null)
             {
-                log.info("match found: {s}/{s}\n", .{pkg.category, pkg.name});
+                log.info("match found: {s}/{s}\n", .{ pkg.category, pkg.name });
 
-                log.print("{s}/{s} {s} ({s}, gen {d})\n", .{pkg.category, pkg.name, pkg.version, pkg.repo, pkg.generation});
+                log.print("|- {s}/{s} {s} ({s}, gen {d})\n", .{ pkg.category, pkg.name, pkg.version, pkg.repo, pkg.generation });
 
                 found += 1;
             }
@@ -155,7 +209,7 @@ pub fn info(io: std.Io, allocator: std.mem.Allocator, package: []const u8) !void
     var foundp: i32 = std.math.minInt(i32);
 
     for (repos) |repo| {
-        log.debug2("checking repo '{s}' priority {d}\n", .{repo.name, repo.priority});
+        log.debug2("checking repo '{s}' priority {d}\n", .{ repo.name, repo.priority });
 
         const entries = db.read_w(io, allocator, repo.name) catch |err| {
             log.warn("failed reading database '{s}': {s}\n", .{
@@ -187,14 +241,13 @@ pub fn info(io: std.Io, allocator: std.mem.Allocator, package: []const u8) !void
     };
 
     log.success("found installed package '{s}'\n", .{pkg.name});
-    // wow log.print
     log.print(
-        \\name: {s}
-        \\category: {s}
-        \\version: {s}
-        \\repo: {s}
-        \\generation: {d}
-        \\objhash: {x}
+        \\{s}
+        \\|- category:   {s}
+        \\|- version:    {s}
+        \\|- repo:       {s}
+        \\|- generation: {d}
+        \\'- objhash:    {x}
         \\
-    , .{pkg.name, pkg.category, pkg.version, pkg.repo, pkg.generation, pkg.objhash});
+    , .{ pkg.name, pkg.category, pkg.version, pkg.repo, pkg.generation, pkg.objhash });
 }

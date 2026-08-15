@@ -4,3 +4,4 @@ its gonna take me what? 2 weeks to get this shit where i want if i work real har
 but big hitters is: gc not removing dependency referenced things, dependencies at all, how things interact w eachother and such, its a hard ecosystem
 
 oh and also i gotta add stratum managing and stratum garbage collection (when old packages dont point in old stratums they get cleaned up)
+

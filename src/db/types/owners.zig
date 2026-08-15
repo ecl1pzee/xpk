@@ -16,10 +16,19 @@ pub const Ownererror = error{ badmagic, unsupportedvers, crcmismatch, truncated 
 
 fn write_f(list: *std.ArrayList(u8), allocator: std.mem.Allocator, field: []const u8) !void {
     var lenbuf: [2]u8 = undefined;
-    std.mem.writeInt(u16, &lenbuf, @intCast(field.len), .little);
+
+    std.mem.writeInt(u16,&lenbuf,@intCast(field.len),.little);
+
     try list.appendSlice(allocator, &lenbuf);
-    try list.appendSlice(allocator, field);
+
+    // had memcpy issues here, overlapping shit so i decided to dupe because memcpy doesn't allowz zero copy slices
+    const copy = try allocator.dupe(u8, field);
+    defer allocator.free(copy);
+
+    try list.appendSlice(allocator, copy);
 }
+
+
 
 fn read_f(buf: []const u8, pos: *usize) []const u8 {
     const len = std.mem.readInt(u16, buf[pos.*..][0..2], .little);

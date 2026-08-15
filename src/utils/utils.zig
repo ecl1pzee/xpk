@@ -15,7 +15,7 @@ const keygen = @import("../security/keygen.zig");
 const mlist = @import("../misc/list.zig");
 const fsutil = @import("fsutil.zig");
 const garbage = @import("../gc/gc.zig");
-const stratumforeal = @import("../stratum/stratum.zig");
+const systreefr = @import("../systree/systree.zig");
 const rollbackforeal = @import("../rollback/rollback.zig");
 
 pub const cli = struct {
@@ -84,11 +84,11 @@ pub const gc = struct {
     pub const run = garbage.run;
 };
 
-pub const stratum = struct {
-    pub const seal = stratumforeal.seal_stratum;
-    pub const revert = stratumforeal.revert_stratum;
-    pub const history = stratumforeal.history;
-    pub const Action = stratumforeal.Action;
+pub const systree = struct {
+    pub const seal = systreefr.seal_systree;
+    pub const revert = systreefr.revert_systree;
+    pub const history = systreefr.history;
+    pub const Action = systreefr.Action;
 };
 
 pub const rollback = struct {

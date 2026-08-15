@@ -25,7 +25,7 @@ pub const objects = base ++ "/objects";
 // cool names down here but we may go into a more git naming convention (like objects above)
 
 // generations and filesystem snapshots fr packages
-pub const strata = base ++ "/strata";
+pub const snapshots = base ++ "/snapshots";
 //active shit
 pub const current = base ++ "/current";
-pub const stratums = base ++ "/stratums";
+pub const systree = base ++ "/systree";

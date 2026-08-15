@@ -57,6 +57,8 @@ fn format_head(allocator: std.mem.Allocator, head: [32]u8) ![]u8 {
 }
 
 // checks your indexes from each repo
+// note: after i make automl great, i will add an error here if you didn't sync yet or an auto sync.
+// too lazy to do rn.
 pub fn remote_fetch(io: std.Io, allocator: std.mem.Allocator, package: []const u8) !types.Pkgurl {
     const reposbytes = try std.Io.Dir.cwd().readFileAlloc(io, globals.reposconf, allocator, .unlimited);
     defer allocator.free(reposbytes);

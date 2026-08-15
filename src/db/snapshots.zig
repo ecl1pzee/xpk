@@ -335,7 +335,7 @@ pub fn walk_tree(io: std.Io, allocator: std.mem.Allocator, roothash: [32]u8, pre
 pub fn generation_path(allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, generation: u32) ![]u8 {
     var genbuf: [10]u8 = undefined;
     const genstr = try std.fmt.bufPrint(&genbuf, "layer-{d}", .{generation});
-    return std.fs.path.join(allocator, &.{ globals.strata, reponame, pkgname, genstr });
+    return std.fs.path.join(allocator, &.{ globals.snapshots, reponame, pkgname, genstr });
 }
 
 pub fn current_path(allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8) ![]u8 {
@@ -471,7 +471,7 @@ pub fn write_owners(io: std.Io, allocator: std.mem.Allocator, entries: []const o
     try fwriter.interface.writeAll(encoded);
     try fwriter.interface.flush();
 }
-// merge error, fun fact most names are actually inspired by git, except strata, thats a geology term. may eventually change to when settling on v1
+// merge error, fun fact most names are actually inspired by git, except snapshots, thats a geology term. may eventually change to when settling on v1
 pub const Mergeerror = error{pathownedbyanother};
 
 const Mergectx = struct {
@@ -532,7 +532,7 @@ fn merge_linkcb(allocator: std.mem.Allocator, crel: []const u8, hash: [32]u8, mo
         });
     }
 }
-
+// merges a tree,  main thing, is actually the orchestrator of everything.
 pub fn merge_tree(io: std.Io, allocator: std.mem.Allocator, reponame: []const u8, pkgname: []const u8, roothash: [32]u8) !void {
     const existing = try read_owners(io, allocator);
     defer allocator.free(existing);
