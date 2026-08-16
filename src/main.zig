@@ -95,7 +95,6 @@ pub fn main(init: std.process.Init) !void {
         return;
     } else 
     
-
     if (std.mem.eql(u8, args[1], "-h") or std.mem.eql(u8, args[1], "help")) {
         utils.cli.helpmenu();
         return;

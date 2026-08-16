@@ -2,3 +2,5 @@ alright, yeah no big plans, but another one is this:
 
 alongside /opt/xpk/systree/systree-N, we are gonna store a binary list of all packages (binary being actually useful here since users would likely have thousands of packages)
 and the merged systree hash.
+
+there is, a very big architechtural desicion looking forward to me: and thats how im actually going to handle snapshots. and im having, major, major trouble with that.
