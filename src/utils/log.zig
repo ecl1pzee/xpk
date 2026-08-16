@@ -28,7 +28,7 @@ inline fn cprefix(comptime code: []const u8, comptime prefix: []const u8) []cons
     return "\x1b[" ++ code ++ "m" ++ prefix ++ reset;
 }
 
-// auto-nesting for the debug tiers: depth grows with severity 
+// auto nest, i js added to make nicer
 inline fn nestprefix(comptime depth: usize) []const u8 {
     comptime var buf: []const u8 = "";
     comptime var i: usize = 0;
@@ -62,6 +62,11 @@ pub inline fn info(comptime fmt: []const u8, args: anytype) void {
     print("├─ " ++ fmt, args);
 }
 
+pub inline fn begin(comptime fmt: []const u8, args: anytype) void {
+    if (!enabled(.info)) return;
+    print("┌─ " ++ fmt, args);
+}
+
 pub inline fn success(comptime fmt: []const u8, args: anytype) void {
     if (!enabled(.info)) return;
     if (color) {
@@ -74,11 +79,20 @@ pub inline fn success(comptime fmt: []const u8, args: anytype) void {
 // prompts always print regardless of verbosity
 pub inline fn ask(comptime fmt: []const u8, args: anytype) void {
     if (color) {
-        print(cprefix("36", "└─ ? ") ++ fmt, args);
+        print(cprefix("36", "┌─ ? ") ++ fmt, args);
     } else {
-        print("└─ ? " ++ fmt, args);
+        print("┌─ ? " ++ fmt, args);
     }
 }
+
+pub inline fn askmid(comptime fmt: []const u8, args: anytype) void {
+    if (color) {
+        print(cprefix("36", "├─ ? ") ++ fmt, args);
+    } else {
+        print("├─ ? " ++ fmt, args);
+    }
+}
+
 
 // for people that like shit on a golden platter
 pub inline fn debug1(comptime fmt: []const u8, args: anytype) void {
