@@ -41,19 +41,22 @@ pub const Idxentry = struct {
     }
 
    
-    // decodes an entry starting a offs in buf, without copy, the returned slices borrow directly from buf so buf must 100% outlive idxentry
-    pub fn decode(buf: []const u8, offset: usize) Idxentry {
+    // decodes an entry starting at offs in buf, without copy, the returned slices borrow directly from buf so buf must 100% outlive idxentry
+    pub fn decode(buf: []const u8, offset: usize) !Idxentry {
         var pos = offset;
+
+        // need at least 32 bytes for the hash
+        if (pos + 32 > buf.len) return error.truncated;
 
         // hashing storage logic
         var hash: [32]u8 = undefined;
         @memcpy(&hash, buf[pos..][0..32]);
         pos += 32;
 
-        const name = read_f(buf, &pos);
-        const category = read_f(buf, &pos);
-        const version = read_f(buf, &pos);
-        const description = read_f(buf, &pos);
+        const name = try read_f(buf, &pos);
+        const category = try read_f(buf, &pos);
+        const version = try read_f(buf, &pos);
+        const description = try read_f(buf, &pos);
 
         return .{
             .xhash = hash,
@@ -63,10 +66,13 @@ pub const Idxentry = struct {
             .description = description,
         };
     }
-    // read_field, reads the field by getting position
-    fn read_f(buf: []const u8, pos: *usize) []const u8 {
+
+    // same fix as owners
+    fn read_f(buf: []const u8, pos: *usize) ![]const u8 {
+        if (pos.* + 2 > buf.len) return error.truncated;
         const len = std.mem.readInt(u16, buf[pos.*..][0..2], .little);
         pos.* += 2;
+        if (pos.* + len > buf.len) return error.truncated;
         const s = buf[pos.*..][0..len];
         pos.* += len;
         return s;
@@ -127,7 +133,8 @@ pub fn find_package(buf: []const u8, offsets: []const u32, entriesst: usize, nam
     var hi: usize = offsets.len;
     while (lo < hi) { // walk and debyg
         const mid = lo + (hi - lo) / 2;
-        const entry = Idxentry.decode(buf, entriesst + offsets[mid]);
+        // nwo erro union
+        const entry = Idxentry.decode(buf, entriesst + offsets[mid]) catch return null;
         switch (std.mem.order(u8, entry.name, name)) {
             .eq => return entry,
             .lt => lo = mid + 1,

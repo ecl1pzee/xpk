@@ -29,7 +29,8 @@ pub fn parse_k(allocator: std.mem.Allocator, text: []const u8) !types.Keyring {
     if (doc.children("maintainers")) |*maintainers| {
         var it = maintainers.*;
         while (it.next()) |entry| {
-            try result.maintainers.put(entry.key_ptr.*, try key_ftb(entry.value_ptr));
+            // pass entry.value_ptr.values instead of entry.value_ptr, that was fix for my new automl shit
+            try result.maintainers.put(entry.key_ptr.*, try key_ftb(&entry.value_ptr.values));
             foundkeys = true;
         }
     }
@@ -37,7 +38,8 @@ pub fn parse_k(allocator: std.mem.Allocator, text: []const u8) !types.Keyring {
     if (doc.children("helpers")) |*helpers| {
         var it = helpers.*;
         while (it.next()) |entry| {
-            try result.helpers.put(entry.key_ptr.*, try key_ftb(entry.value_ptr));
+            // pass entry.value_ptr.values instead of entry.value_ptr, that was fix for my new automl shit
+            try result.helpers.put(entry.key_ptr.*, try key_ftb(&entry.value_ptr.values));
             foundkeys = true;
         }
     }

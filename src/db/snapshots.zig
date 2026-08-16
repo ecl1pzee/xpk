@@ -496,10 +496,20 @@ fn merge_checkcb(allocator: std.mem.Allocator, crel: []const u8, hash: [32]u8, m
         }
     }
 }
+
 // no need for mode = discard
+// also this new update prevents faster write = more rights
 fn merge_linkcb(allocator: std.mem.Allocator, crel: []const u8, hash: [32]u8, mode: u32, ctx: *anyopaque) anyerror!void {
     _ = mode;
     const c: *Mergectx = @ptrCast(@alignCast(ctx));
+
+    // re check owner
+    if (owners.find_owner(c.existing, crel)) |owner| {
+        if (!std.mem.eql(u8, owner.reponame, c.reponame) or !std.mem.eql(u8, owner.pkgname, c.pkgname)) {
+            log.err("refusing link: {s} is already owned by {s}/{s}, will not clobber\n", .{ crel, owner.reponame, owner.pkgname });
+            return Mergeerror.pathownedbyanother;
+        }
+    }
 
     const target = try content_path(allocator, hash);
     defer allocator.free(target);
