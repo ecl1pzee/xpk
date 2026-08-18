@@ -29,7 +29,7 @@ fn write_f(list: *std.ArrayList(u8), allocator: std.mem.Allocator, field: []cons
 }
 
 
-
+// fix
 fn read_f(buf: []const u8, pos: *usize) []const u8 {
     const len = std.mem.readInt(u16, buf[pos.*..][0..2], .little);
     pos.* += 2;
@@ -37,6 +37,7 @@ fn read_f(buf: []const u8, pos: *usize) []const u8 {
     pos.* += len;
     return s;
 }
+
 
 pub fn encode_owners(allocator: std.mem.Allocator, entries: []const Ownerentry) ![]u8 {
     var out: std.ArrayList(u8) = .empty;

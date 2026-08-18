@@ -8,6 +8,32 @@ const print = std.debug.print;
 // so, congrats to me! i've written an entire fucking fully function toml parser, and its working here as evident
 
 // instead of a shitty 150 line parser my parser is now 1000 lines and is a helper!
+// rewritten entirely.
+
+// helpers
+
+pub fn get_str_dup(doc: *automl.Document, section: []const u8, key: []const u8, allocator: std.mem.Allocator) !?[]const u8 {
+    if (try doc.get_str(section, key)) |s| {
+        return try allocator.dupe(u8, s);
+    }
+    return null;
+}
+
+pub fn get_strarr_dup_or_empty(doc: *automl.Document, section: []const u8, key: []const u8, allocator: std.mem.Allocator) ![]const []const u8 {
+    if (try doc.get_strarr(section, key, allocator)) |arr| {
+        var duped = try allocator.alloc([]const u8, arr.len);
+        for (arr, 0..) |s, i| {
+            duped[i] = try allocator.dupe(u8, s);
+        }
+        return duped;
+    }
+    return &[_][]const u8{};
+}
+// helpers end
+
+// entirelyrewritten, every function. 
+// because of automl string dedups.
+
 pub fn parse_k(allocator: std.mem.Allocator, text: []const u8) !types.Keyring {
     var parser = automl.Parser.init(allocator);
     var doc = parser.parse(text) catch |err| {
@@ -30,7 +56,9 @@ pub fn parse_k(allocator: std.mem.Allocator, text: []const u8) !types.Keyring {
         var it = maintainers.*;
         while (it.next()) |entry| {
             // pass entry.value_ptr.values instead of entry.value_ptr, that was fix for my new automl shit
-            try result.maintainers.put(entry.key_ptr.*, try key_ftb(&entry.value_ptr.values));
+            const key_dup = try allocator.dupe(u8, entry.key_ptr.*);
+            errdefer allocator.free(key_dup);
+            try result.maintainers.put(key_dup, try key_ftb(allocator, &entry.value_ptr.values));
             foundkeys = true;
         }
     }
@@ -38,8 +66,9 @@ pub fn parse_k(allocator: std.mem.Allocator, text: []const u8) !types.Keyring {
     if (doc.children("helpers")) |*helpers| {
         var it = helpers.*;
         while (it.next()) |entry| {
-            // pass entry.value_ptr.values instead of entry.value_ptr, that was fix for my new automl shit
-            try result.helpers.put(entry.key_ptr.*, try key_ftb(&entry.value_ptr.values));
+            const key_dup = try allocator.dupe(u8, entry.key_ptr.*);
+            errdefer allocator.free(key_dup);
+            try result.helpers.put(key_dup, try key_ftb(allocator, &entry.value_ptr.values));
             foundkeys = true;
         }
     }
@@ -51,16 +80,28 @@ pub fn parse_k(allocator: std.mem.Allocator, text: []const u8) !types.Keyring {
 }
 
 // pulls fields from there, key_fromtable, required for children
-fn key_ftb(table: *automl.Table) !types.Key {
-    return .{
-        .fingerprint = (table.get("fingerprint") orelse return error.unknownkeyinkeyring).as_str() orelse return error.unknownkeyinkeyring,
-        .added = if (table.get("added")) |v| v.as_str() orelse "" else "",
-        .active = if (table.get("active")) |v| v.as_bool() orelse false else false,
-        .revoked = if (table.get("revoked")) |v| v.as_bool() orelse false else false,
+fn key_ftb(allocator: std.mem.Allocator, table: *automl.Table) !types.Key {
+    const fp = (table.get("fingerprint") orelse return error.unknownkeyinkeyring).as_str() orelse return error.unknownkeyinkeyring;
+    var key: types.Key = .{
+        .fingerprint = try allocator.dupe(u8, fp),
+        .added = "",
+        .active = false,
+        .revoked = false,
     };
+    if (table.get("added")) |v| {
+        if (v.as_str()) |s| key.added = try allocator.dupe(u8, s);
+    }
+    if (table.get("active")) |v| {
+        if (v.as_bool()) |b| key.active = b;
+    }
+    if (table.get("revoked")) |v| {
+        if (v.as_bool()) |b| key.revoked = b;
+    }
+    return key;
 }
 
-// parse_r, now wrapped around automl instead of handroled 150 lines of shitty code
+
+
 pub fn parse_r(allocator: std.mem.Allocator, text: []const u8) ![]types.Repo {
     var parser = automl.Parser.init(allocator);
     var doc = parser.parse(text) catch |err| {
@@ -79,7 +120,7 @@ pub fn parse_r(allocator: std.mem.Allocator, text: []const u8) ![]types.Repo {
     var sections = doc.sections.iterator(); // sections is a field (StringHashMap), not a method
     while (sections.next()) |entry| {
         const name = entry.key_ptr.*;
-        const sect = entry.value_ptr; // *Section -- field access auto-derefs, so sect.values works directly
+        const sect = entry.value_ptr; // section
 
         const rawurl = sect.values.get("url") orelse return error.missingurl;
         const urlstr = rawurl.as_str() orelse return error.missingurl;
@@ -124,7 +165,6 @@ pub fn parse_r(allocator: std.mem.Allocator, text: []const u8) ![]types.Repo {
     return repos.toOwnedSlice(allocator);
 }
 
-// parse_a, now wrapped around automl three sections (info/pkg/build)
 pub fn parse_a(allocator: std.mem.Allocator, text: []const u8) !types.Xbuild {
     var parser = automl.Parser.init(allocator);
     var doc = parser.parse(text) catch |err| {
@@ -141,18 +181,18 @@ pub fn parse_a(allocator: std.mem.Allocator, text: []const u8) !types.Xbuild {
     if (doc.section("build") == null) return error.missingbuild;
 
     // [info]
-    result.info.homepage = try doc.get_str("info", "homepage") orelse "";
-    result.info.upstream = try doc.get_str("info", "upstream");
-    result.info.name = try doc.get_str("info", "name") orelse "";
-    result.info.version = try doc.get_str("info", "version") orelse "";
-    result.info.desc = try doc.get_str("info", "desc");
-    result.info.license = try doc.get_str("info", "license");
-    result.info.deps = try doc.get_strarr("info", "deps", allocator);
-    result.info.message = try doc.get_str("info", "message") orelse "";
+    result.info.homepage = try get_str_dup(&doc, "info", "homepage", allocator) orelse "";
+    result.info.upstream = try get_str_dup(&doc, "info", "upstream", allocator);
+    result.info.name = try get_str_dup(&doc, "info", "name", allocator) orelse "";
+    result.info.version = try get_str_dup(&doc, "info", "version", allocator) orelse "";
+    result.info.desc = try get_str_dup(&doc, "info", "desc", allocator) orelse return error.missingdesc;
+    result.info.license = try get_str_dup(&doc, "info", "license", allocator) orelse return error.missinglicense;
+    result.info.deps = try get_strarr_dup_or_empty(&doc, "info", "deps", allocator);
+    result.info.message = try get_str_dup(&doc, "info", "message", allocator) orelse "";
 
     // [pkg]
-    result.pkg.src_url = try doc.get_str("pkg", "src-url") orelse "";
-    result.pkg.sha256sum = try doc.get_str("pkg", "sha256") orelse "";
+    result.pkg.src_url = try get_str_dup(&doc, "pkg", "src-url", allocator) orelse "";
+    result.pkg.sha256sum = try get_str_dup(&doc, "pkg", "sha256", allocator) orelse "";
 
     if (try doc.get_str("pkg", "strip")) |strip| {
         if (!(std.mem.eql(u8, strip, "1") or
@@ -161,17 +201,17 @@ pub fn parse_a(allocator: std.mem.Allocator, text: []const u8) !types.Xbuild {
         {
             return error.badstripabove3;
         }
-        result.pkg.strip = strip;
+        result.pkg.strip = try allocator.dupe(u8, strip);
     }
 
-    result.pkg.pre_hooks = try doc.get_strarr("pkg", "pre-hooks", allocator);
+    result.pkg.pre_hooks = try get_strarr_dup_or_empty(&doc, "pkg", "pre-hooks", allocator);
 
     // [build]
-    result.build.build_sys = try doc.get_str("build", "build-sys") orelse "";
-    result.build.script = try doc.get_str("build", "script");
-    result.build.post_hooks = try doc.get_strarr("build", "post-hooks", allocator);
-    result.build.args = try doc.get_strarr("build", "args", allocator);
-    result.build.build_deps = try doc.get_strarr("build", "build-deps", allocator);
+    result.build.build_sys = try get_str_dup(&doc, "build", "build-sys", allocator) orelse "";
+    result.build.script = try get_str_dup(&doc, "build", "script", allocator);
+    result.build.post_hooks = try get_strarr_dup_or_empty(&doc, "build", "post-hooks", allocator);
+    result.build.args = try get_strarr_dup_or_empty(&doc, "build", "args", allocator);
+    result.build.build_deps = try get_strarr_dup_or_empty(&doc, "build", "build-deps", allocator);
 
     if (result.pkg.src_url.len == 0) return error.missingsrcurl;
     if (result.pkg.sha256sum.len == 0) return error.missingsha256sum;
@@ -179,9 +219,6 @@ pub fn parse_a(allocator: std.mem.Allocator, text: []const u8) !types.Xbuild {
     return result;
 }
 
-
-// parse_c
-// you also wanna for your own libraries or executables if ur using automl, to dupe or intcast shit, specifically dupe if []const u8, intcast if its an int,
 pub fn parse_c(allocator: std.mem.Allocator, text: []const u8) !types.Config {
     var parser = automl.Parser.init(allocator);
     var doc = parser.parse(text) catch |err| {

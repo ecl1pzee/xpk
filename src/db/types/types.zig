@@ -74,7 +74,7 @@ pub const Dbentry = struct {
             .generation = generation,
         };
     }
-
+    
     fn read_f(buf: []const u8, pos: *usize) []const u8 {
         const len = std.mem.readInt(u16, buf[pos.*..][0..2], .little);
         pos.* += 2;
