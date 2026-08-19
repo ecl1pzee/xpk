@@ -1,7 +1,8 @@
 The XPK package manager
 =======================
 <p allign="center>
-<img src="https://img.shields.io/badge/Zig-black?style=for-the-badge&logo=zig" alt="Badge">
+<img src="https://img.shields.io/badge/opsex-black?style=for-the-badge&logo=shieldsdotio" alt="Badge">
+<img src="https://img.shields.io/badge/zig-black?style=for-the-badge&logo=zig" alt="Badge">
 <img src="https://img.shields.io/badge/clang-black?style=for-the-badge&logo=c" alt="Badge">
 <img src="https://img.shields.io/badge/status-development-black?style=for-the-badge&labelColor=363636" alt="Badge">
 <img src="https://img.shields.io/badge/license-bsd--2--clause-black?style=for-the-badge&labelColor=363636" alt="Badge">
